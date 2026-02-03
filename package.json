@@ -1,0 +1,29 @@
+{
+  "name": "cheerio-html-parser-api",
+  "version": "1.0.0",
+  "description": "A Docker-based API service for HTML text extraction and merge using Cheerio",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "cheerio",
+    "html",
+    "parser",
+    "api",
+    "translation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
+    "express": "^4.18.2",
+    "zod": "^3.22.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
