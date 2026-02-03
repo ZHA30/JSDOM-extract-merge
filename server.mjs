@@ -1,6 +1,4 @@
 import http from 'http';
-import fs from 'fs';
-import path from 'path';
 import { JSDOM } from 'jsdom';
 
 // Configuration from environment variables
@@ -8,67 +6,17 @@ const PORT = process.env.PORT || 3000;
 const API_TOKEN = process.env.API_TOKEN;
 const MAX_HTML_SIZE = 10 * 1024 * 1024; // 10MB
 
+// Service identification
+const SERVICE_NAME = 'JSDOM-extract-merge';
+
 // Validate required environment variables
 if (!API_TOKEN) {
   log('ERROR', 'API_TOKEN environment variable is required');
   process.exit(1);
 }
 
-// Read README content for homepage
-let README_CONTENT = '';
-try {
-  const readmePath = path.join(process.cwd(), 'README.md');
-  if (fs.existsSync(readmePath)) {
-    README_CONTENT = fs.readFileSync(readmePath, 'utf-8');
-  } else {
-    throw new Error('README.md not found');
-  }
-} catch (error) {
-  log('WARN', 'README.md not found, using fallback documentation');
-  README_CONTENT = `# jsdom Text Extractor API
-
-HTML text node extraction API based on jsdom.
-
-## Quick Start
-
-\`\`\`bash
-docker run -d -p 3000:3000 -e API_TOKEN=your-token jsdom-text-extractor
-\`\`\`
-
-## API Endpoint
-
-**POST /extract**
-
-Extract all non-empty text nodes from HTML.
-
-\`\`\`json
-{
-  "html": "<div><p>Hello</p><p>World</p></div>"
-}
-\`\`\`
-
-Response:
-\`\`\`json
-{
-  "texts": ["Hello", "World"]
-}
-\`\`\`
-
-## Health Check
-
-**GET /healthz**
-
-Returns \`OK\` if service is running.
-
-## Requirements
-
-- Set \`API_TOKEN\` environment variable
-- Send requests with \`Authorization: Bearer <token>\` header
-- Max HTML size: 10MB
-
-Documentation: See README.md in repository for full details.
-`;
-}
+// Homepage content
+const HOMEPAGE_CONTENT = `${SERVICE_NAME}`;
 
 // Constants
 const CONTENT_TYPE_JSON = 'application/json';
@@ -514,10 +462,10 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Homepage - Return README documentation (GET /)
+  // Homepage - Return service name (GET /)
   if (req.method === 'GET' && req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' });
-    res.end(README_CONTENT);
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(HOMEPAGE_CONTENT);
     return;
   }
 

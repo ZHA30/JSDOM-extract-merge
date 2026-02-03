@@ -1,7 +1,7 @@
 {
-  "name": "jsdom-text-extractor-api",
+  "name": "jsdom-extract-merge",
   "version": "1.0.0",
-  "description": "HTML text node extraction API based on jsdom",
+  "description": "HTML text extraction and translation merge API based on jsdom",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
@@ -11,7 +11,10 @@
     "jsdom",
     "html",
     "text-extraction",
-    "api"
+    "translation",
+    "merge",
+    "api",
+    "bilingual"
   ],
   "author": "",
   "license": "MIT",

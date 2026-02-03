@@ -1,6 +1,6 @@
-# jsdom Text Extractor API
+# JSDOM-extract-merge
 
-A minimal HTML text node extraction API based on jsdom. Takes raw HTML as input and returns all non-empty text nodes in a JSON array.
+A minimal HTML text extraction and translation merge API based on jsdom. Extracts text content with inline HTML tags preserved and merges translations back into the original HTML structure.
 
 ## Features
 
@@ -25,13 +25,13 @@ TOKEN=$(openssl rand -base64 32)
 echo "Your token: $TOKEN"
 
 # Build and run
-docker build -t jsdom-text-extractor .
+docker build -t jsdom-extract-merge .
 docker run -d \
-  --name jsdom-extractor \
+  --name jsdom-extract-merge \
   -p 3000:3000 \
   -e API_TOKEN=$TOKEN \
   --restart unless-stopped \
-  jsdom-text-extractor
+  jsdom-extract-merge
 ```
 
 ### Using Node.js Directly

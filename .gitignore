@@ -1,5 +1,8 @@
 .DS_Store
-Readability-main/
+
+# Backup files
+*.bak
+*.backup
 
 # Node.js
 node_modules/
