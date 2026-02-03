@@ -1,8 +1,6 @@
 import express from 'express';
-import swaggerUi from 'swagger-ui-express';
 import { config } from 'dotenv';
 import routes from './routes.js';
-import { swaggerSpec } from './swagger.js';
 import { timeoutMiddleware, errorHandler, morganMiddleware } from './middleware.js';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
@@ -57,13 +55,6 @@ app.use((req, res, next) => {
 // API Routes
 app.use('/', routes);
 
-// Swagger API Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  explorer: true,
-  customSiteTitle: 'Cheerio-transerver API Docs',
-  customCss: '.swagger-ui .topbar { display: none }'
-}));
-
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -113,7 +104,7 @@ server = app.listen(PORT, '0.0.0.0', () => {
 ╠═══════════════════════════════════════════════════════════╣
 ║                                                           ║
 ║  Server:     http://0.0.0.0:${PORT}                      ║
-║  API Docs:   http://localhost:${PORT}/api-docs            ║
+
 ║  Health:     http://localhost:${PORT}/healthz             ║
 ║                                                           ║
 ║  Environment: ${NODE_ENV}                                        ║
