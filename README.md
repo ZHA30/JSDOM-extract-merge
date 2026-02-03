@@ -1,358 +1,266 @@
 # JSDOM-extract-merge
 
-A minimal HTML text extraction and translation merge API based on jsdom. Extracts text content with inline HTML tags preserved and merges translations back into the original HTML structure.
+HTML 文本提取与翻译合并 API。基于 jsdom 实现，支持行内标签保留，通过 path 精确定位 DOM 节点。
 
-## Features
+## 特性
 
-- **Text Extraction**: Extract text content with inline HTML tags (em, strong, code, a, etc.) preserved
-- **Path-Based Navigation**: Each extracted text has a unique path for precise DOM node reference
-- **Translation Merge**: Merge translated content back into original HTML structure
-- **Complete Workflow**: Two endpoints (`POST /extract` and `POST /merge`) for translation pipeline
-- **Token Authentication**: Simple Bearer token authentication
-- **Zero Configuration**: Works out of the box with sensible defaults
-- **Stateless**: No caching, no database, no persistent storage
-- **Lightweight**: Built with Node.js native HTTP module, minimal dependencies
-- **Docker Ready**: Single command deployment
-- **Documentation**: Visit `GET /` for inline API documentation
+- **智能提取**: 递归提取块级元素中的文本内容，保留所有行内标签（em、strong、code、a 等）
+- **路径定位**: 为每个文本块生成唯一 DOM 路径，支持精确定位和回填
+- **媒体过滤**: 自动跳过 figure、svg、video、audio 等无需翻译的媒体元素
+- **双语合并**: 将翻译内容无缝合并回原 HTML 结构
+- **Bearer 认证**: 简单的 Token 认证机制
+- **轻量架构**: 基于 Node.js 原生 HTTP 模块，无框架依赖
 
-## Quick Start
+## 快速开始
 
-### Using Docker (Recommended)
+### Docker（推荐）
 
 ```bash
-# Generate a secure token
+# 生成安全 token
 TOKEN=$(openssl rand -base64 32)
-echo "Your token: $TOKEN"
 
-# Build and run
+# 构建并运行
 docker build -t jsdom-extract-merge .
-docker run -d \
-  --name jsdom-extract-merge \
-  -p 3000:3000 \
-  -e API_TOKEN=$TOKEN \
-  --restart unless-stopped \
-  jsdom-extract-merge
+docker run -d -p 3000:3000 -e API_TOKEN=$TOKEN jsdom-extract-merge
 ```
 
-### Using Node.js Directly
+### Node.js
 
 ```bash
-# Install dependencies
 npm install
-
-# Set environment variable
-export API_TOKEN=your-secure-token-here
-
-# Start server
+export API_TOKEN=your-token
 npm start
 ```
 
-## API Documentation
+## API 文档
 
-### Endpoints
+### 端点总览
 
-#### 1. Extract Text
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/` | GET | 服务标识 |
+| `/healthz` | GET | 健康检查 |
+| `/extract` | POST | 提取文本内容和路径 |
+| `/merge` | POST | 合并翻译内容 |
+
+### 1. 提取文本
 
 **`POST /extract`**
 
-Extract all text content with inline HTML tags from the provided HTML string.
+提取 HTML 中的文本内容，保留行内标签并生成 DOM 路径。
 
-##### Request Headers
-
+**请求头**:
 ```http
 Content-Type: application/json
-Authorization: Bearer <your-token>
+Authorization: Bearer <token>
 ```
 
-##### Request Body
-
+**请求体**:
 ```json
 {
-  "html": "<string>"
+  "html": "<div><h1>Title</h1><p>Content with <strong>bold</strong></p></div>"
 }
 ```
 
-| Field | Type   | Required | Description                     |
-|-------|--------|----------|---------------------------------|
-| `html` | string | Yes      | Raw HTML string to process      |
-
-##### Response
-
-###### Success (200 OK)
-
+**响应** (200 OK):
 ```json
 {
   "texts": [
     { "path": "html.0.body.0.div.0.h1.0", "text": "Title" },
-    { "path": "html.0.body.0.div.0.p.0", "text": "Paragraph with <strong>bold</strong>" }
+    { "path": "html.0.body.0.div.0.p.0", "text": "Content with <strong>bold</strong>" }
   ]
 }
 ```
 
-- **path**: Unique DOM path for each text block (used for merge)
-- **text**: HTML fragment with inline tags preserved
+**字段说明**:
+- `path`: DOM 节点路径，用于 merge 时定位
+- `text`: 提取的 HTML 片段，保留行内标签
 
-#### 2. Merge Translations
+### 2. 合并翻译
 
 **`POST /merge`**
 
-Merge translated content back into the original HTML structure.
+将翻译内容合并回原 HTML 结构。
 
-##### Request Headers
-
+**请求头**:
 ```http
 Content-Type: application/json
-Authorization: Bearer <your-token>
+Authorization: Bearer <token>
 ```
 
-##### Request Body
-
+**请求体**:
 ```json
 {
-  "html": "<string>",
+  "html": "<div><h1>Title</h1><p>Content</p></div>",
   "translations": [
-    { "path": "<string>", "text": "<string>" }
+    { "path": "html.0.body.0.div.0.h1.0", "text": "标题" },
+    { "path": "html.0.body.0.div.0.p.0", "text": "内容" }
   ]
 }
 ```
 
-| Field          | Type   | Required | Description                                      |
-|----------------|--------|----------|--------------------------------------------------|
-| `html`         | string | Yes      | Original HTML string                              |
-| `translations` | array  | Yes      | Array of translations with corresponding paths   |
-| `translations[].path` | string | Yes | DOM path from /extract response                  |
-| `translations[].text` | string | Yes | Translated content (may contain inline HTML tags) |
-
-##### Response
-
-###### Success (200 OK)
-
+**响应** (200 OK):
 ```json
 {
-  "transhtml": "<div><p>Hello<span><br>你好</span></p></div>"
+  "transhtml": "<div><h1>Title<span><br>标题</span></h1><p>Content<span><br>内容</span></p></div>"
 }
 ```
 
-Returns the original HTML with translations appended to each block.
+**字段说明**:
+- `html`: 原始 HTML 字符串
+- `translations`: 翻译数组，每项包含 `path` 和 `text`
+- `transhtml`: 合并后的完整 HTML
 
-##### Error Responses
+### 错误响应
 
-| Status Code | Error               | Description                                             |
-|-------------|---------------------|---------------------------------------------------------|
-| 401         | `AUTH_REQUIRED`     | Missing or invalid Authorization header/token           |
-| 400         | `INVALID_INPUT`     | Invalid JSON, missing required fields, or size exceeds 10MB |
-| 400         | `INVALID_PATH`      | Path not found in HTML structure                        |
-| 500         | `PROCESSING_ERROR`  | HTML parsing/merge failed                               |
-| 404         | `NOT_FOUND`         | Invalid endpoint                                        |
+| 状态码 | 错误类型 | 描述 |
+|--------|----------|------|
+| 401 | `AUTH_REQUIRED` | 缺少或无效的 Authorization 头 |
+| 400 | `INVALID_INPUT` | 无效 JSON、缺少必填字段或超过大小限制 |
+| 400 | `INVALID_PATH` | 指定的路径在 HTML 中不存在 |
+| 500 | `PROCESSING_ERROR` | HTML 处理失败 |
 
-### Health Check
+## 使用示例
 
-**`GET /healthz`**
-
-Simple health check endpoint.
-
-```text
-200 OK
-OK
-```
-
-## Logging
-
-The API outputs structured JSON logs to stdout/stderr, following standard logging practices. Logs include:
-
-- **Level**: `INFO`, `WARN`, `ERROR`
-- **Timestamp**: ISO 8601 format
-- **Request ID**: Unique identifier for each request
-- **Context**: Additional details (IP, sizes, error messages)
-
-### Log Format
-
-```json
-{
-  "timestamp": "2026-02-03T02:50:00.000Z",
-  "level": "INFO",
-  "message": "Request completed successfully",
-  "requestId": "abc123xyz",
-  "htmlSize": 5432,
-  "textCount": 42
-}
-```
-
-### Viewing Logs
-
-#### Docker
+### 完整工作流
 
 ```bash
-# View all logs
-docker logs -f jsdom-extractor
-
-# View only errors
-docker logs -f jsdom-extractor 2>/dev/stderr | grep ERROR
-```
-
-#### Standard Output
-
-All logs are written to stdout/stderr, making them compatible with:
-
-- Docker logging drivers
-- Log aggregation services (ELK, Loki, CloudWatch)
-- Container orchestration (Kubernetes logs)
-
-## Usage Examples
-
-### Complete Translation Workflow
-
-```bash
-# Step 1: Extract text with paths
+# 1. 提取文本
 curl -X POST http://localhost:3000/extract \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-token-here" \
-  -d '{"html": "<div><h1>Title</h1><p>Paragraph with <strong>bold</strong></p></div>"}'
+  -d '{"html": "<div><p>Hello <em>world</em></p></div>"}'
 ```
 
-Response:
 ```json
 {
   "texts": [
-    {"path": "html.0.body.0.div.0.h1.0", "text": "Title"},
-    {"path": "html.0.body.0.div.0.p.0", "text": "Paragraph with <strong>bold</strong>"}
+    {"path": "html.0.body.0.div.0.p.0", "text": "Hello <em>world</em>"}
   ]
 }
 ```
 
 ```bash
-# Step 2: (External) Translate the texts
-# Step 3: Merge translations back
-
+# 2. 翻译（外部服务）
+# 3. 合并
 curl -X POST http://localhost:3000/merge \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-token-here" \
   -d '{
-    "html": "<div><h1>Title</h1><p>Paragraph with <strong>bold</strong></p></div>",
+    "html": "<div><p>Hello <em>world</em></p></div>",
     "translations": [
-      {"path": "html.0.body.0.div.0.h1.0", "text": "标题"},
-      {"path": "html.0.body.0.div.0.p.0", "text": "带有<strong>粗体</strong>的段落"}
+      {"path": "html.0.body.0.div.0.p.0", "text": "你好 <em>世界</em>"}
     ]
   }'
 ```
 
-Response:
 ```json
 {
-  "transhtml": "<div><h1>Title<span><br>标题</span></h1><p>Paragraph with <strong>bold</strong><span><br>带有<strong>粗体</strong>的段落</span></p></div>"
+  "transhtml": "<div><p>Hello <em>world</em><span><br>你好 <em>世界</em></span></p></div>"
 }
 ```
 
-### JavaScript/Node.js
+### JavaScript
 
 ```javascript
-// Step 1: Extract
-const extractRes = await fetch('http://localhost:3000/extract', {
+// 提取
+const { texts } = await fetch('/extract', {
   method: 'POST',
   headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer your-token-here'
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json'
   },
-  body: JSON.stringify({
-    html: '<div><h1>Title</h1><p>Content</p></div>'
-  })
-});
-const { texts } = await extractRes.json();
-// [{path: "...", text: "Title"}, {path: "...", text: "Content"}]
+  body: JSON.stringify({ html: '<div><p>Hello</p></div>' })
+}).then(r => r.json());
 
-// Step 2: Translate (using your translation service)
-const translations = texts.map(item => ({
-  path: item.path,
-  text: await translate(item.text) // your translation function
+// 翻译
+const translations = texts.map(t => ({
+  path: t.path,
+  text: await translate(t.text)
 }));
 
-// Step 3: Merge
-const mergeRes = await fetch('http://localhost:3000/merge', {
+// 合并
+const { transhtml } = await fetch('/merge', {
   method: 'POST',
   headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer your-token-here'
+    'Authorization': 'Bearer ' + token,
+    'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    html: '<div><h1>Title</h1><p>Content</p></div>',
+    html: '<div><p>Hello</p></div>',
     translations
   })
-});
-const { transhtml } = await mergeRes.json();
+}).then(r => r.json());
 ```
 
-### Python
+## 配置
 
-```python
-import requests
+| 环境变量 | 必填 | 默认值 | 描述 |
+|----------|------|--------|------|
+| `PORT` | 否 | 3000 | 服务端口 |
+| `API_TOKEN` | 是 | 无 | Bearer 认证令牌 |
 
-# Step 1: Extract
-extract_res = requests.post(
-    'http://localhost:3000/extract',
-    headers={
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer your-token-here'
-    },
-    json={
-        'html': '<div><h1>Title</h1><p>Content</p></div>'
-    }
-)
-texts = extract_res.json()['texts']
-
-# Step 2: Translate
-translations = [
-    {'path': item['path'], 'text': translate(item['text'])}
-    for item in texts
-]
-
-# Step 3: Merge
-merge_res = requests.post(
-    'http://localhost:3000/merge',
-    headers={
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer your-token-here'
-    },
-    json={
-        'html': '<div><h1>Title</h1><p>Content</p></div>',
-        'translations': translations
-    }
-)
-transhtml = merge_res.json()['transhtml']
-```
-
-## Configuration
-
-The API is configured via environment variables:
-
-| Variable   | Required | Default | Description                    |
-|------------|----------|---------|--------------------------------|
-| `PORT`     | No       | 3000    | Port to listen on              |
-| `API_TOKEN`| Yes      | (none)  | Bearer token for authentication |
-
-### Environment File
-
-Create a `.env` file (use `.env.example` as template):
+### .env 文件
 
 ```env
 API_TOKEN=your-secure-token-here
 PORT=3000
 ```
 
-## Limits & Constraints
+## 工作原理
 
-- **Input Size**: Maximum 10MB per request
-- **Content Type**: Only `application/json` accepted
-- **HTML Processing**: Extracts all text nodes in depth-first order
-- **No Rate Limiting**: Trust-based authentication, implement rate limiting at reverse proxy level if needed
+### 提取流程
 
-## Deployment
+1. 使用 JSDOM 解析 HTML
+2. 遍历 DOM 树，识别块级元素
+3. 提取块级元素的 innerHTML（保留行内标签）
+4. 生成唯一 DOM 路径（如 `html.0.body.0.div.0.p.0`）
+5. 返回 `{path, text}` 数组
 
-### Docker Compose Example
+### 路径格式
+
+```
+html.0.body.0.div.0.p.0
+│     │  │    │    │    │
+│     │  │    │    │    └─ 第 1 个 p 元素
+│     │  │    │    └────── 第 1 个 div 元素
+│     │  │    └─────────── 第 1 个 body 子元素
+│     │  └──────────────── 第 1 个 html 子元素
+│     └─────────────────── 第 1 个 html 元素
+└───────────────────────── 根元素
+```
+
+### 媒体元素过滤
+
+以下元素会被自动跳过：
+
+- `<figure>` - 图片/图表
+- `<picture>` - 图片容器
+- `<svg>` - SVG 图形
+- `<canvas>` - 画布
+- `<iframe>` - 嵌入内容
+- `<video>` - 视频
+- `<audio>` - 音频
+- `<map>` - 图片映射
+- `<object>` - 嵌入对象
+- `<embed>` - 嵌入内容
+
+## 限制
+
+- 最大 HTML 大小：10MB
+- 不执行 JavaScript
+- 不处理 URL（需提供 HTML 文本）
+- 保留 `<script>` 和 `<style>` 内容（如果存在）
+- 无速率限制（建议在反向代理层实现）
+
+## 部署
+
+### Docker Compose
 
 ```yaml
 version: '3.8'
 services:
-  jsdom-extractor:
+  api:
     build: .
     ports:
       - "3000:3000"
@@ -366,15 +274,9 @@ services:
       retries: 3
 ```
 
-### Nginx Reverse Proxy (with HTTPS)
+### Nginx 反向代理
 
 ```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    return 301 https://$server_name$request_uri;
-}
-
 server {
     listen 443 ssl http2;
     server_name your-domain.com;
@@ -382,68 +284,27 @@ server {
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
 
-    location /extract {
+    location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
         client_max_body_size 10M;
     }
 }
 ```
 
-## Security Considerations
+## 安全建议
 
-1. **Generate Strong Tokens**: Use `openssl rand -base64 32` or similar for API tokens
-2. **Use HTTPS**: Always deploy behind a reverse proxy with SSL/TLS
-3. **Token Rotation**: Restart container with new token periodically
-4. **Resource Limits**: Configure Docker memory/CPU limits
-5. **Firewall**: Restrict access to only necessary ports (80/443 externally)
+1. 使用 `openssl rand -base64 32` 生成强 token
+2. 始终通过 HTTPS 部署
+3. 定期轮换 token
+4. 配置适当的资源限制
+5. 在反向代理层实现速率限制
 
-## Dependencies
+## 依赖
 
-- `jsdom`: DOM environment for HTML parsing and text node extraction
+- [jsdom](https://github.com/jsdom/jsdom) ^25.0.1
 
-## How It Works
-
-The API uses jsdom to create a virtual DOM from the provided HTML string. It then traverses the DOM tree starting from the `<body>` element, extracting HTML fragments while preserving inline semantic tags.
-
-**Algorithm**:
-1. Parse HTML using JSDOM
-2. Traverse the DOM tree from `document.body`
-3. For block-level elements (div, p, h1-h6, li, etc.):
-   - If they contain no nested block elements, extract their innerHTML
-   - This preserves all inline tags (span, em, strong, a, code, mark, etc.)
-4. Return array of HTML fragment strings
-
-**Example**:
-```html
-<div><span>W</span>elcome <em>here</em> and see <code>example</code></div>
-```
-→ `["<span>W</span>elcome <em>here</em> and see <code>example</code>"]`
-
-```html
-<p>First paragraph</p>
-<p>Second with <strong>bold</strong> and <a href="/">link</a></p>
-```
-→ `["First paragraph", "Second with <strong>bold</strong> and <a href=\"/\">link</a>"]`
-
-## Known Limitations
-
-- Does not execute JavaScript or render dynamic content
-- Cannot process URLs directly - HTML must be provided as text
-- No caching - each request is processed independently
-- Returns content from all elements including `<script>` and `<style>` tags (if present)
-- Inline tags are preserved as-is; no HTML sanitization or escaping is performed
-- Path-based merge requires the original HTML structure to remain unchanged
-- Single point of failure - no redundancy built-in
-
-## License
+## 许可证
 
 MIT
-
-## Based On
-
-- [jsdom](https://github.com/jsdom/jsdom) - Pure-JavaScript implementation of the DOM and HTML standards

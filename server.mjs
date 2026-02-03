@@ -152,9 +152,29 @@ const BLOCK_ELEMENTS = new Set([
   'tfoot', 'ul', 'video', 'tr', 'td', 'th', 'thead', 'tbody', 'colgroup'
 ]);
 
+// Elements that should be skipped during extraction (no translation needed)
+const SKIP_ELEMENTS = new Set([
+  'figure',      // Images/figures with captions
+  'picture',     // Picture containers
+  'svg',         // SVG graphics
+  'canvas',      // Canvas elements
+  'iframe',      // Embedded content
+  'video',       // Video elements
+  'audio',       // Audio elements
+  'map',         // Image maps
+  'object',      // Embedded objects
+  'embed',       // Embedded content
+  'noscript'     // No-script content
+]);
+
 // Check if an element is a block-level element
 function isBlockElement(element) {
   return element.nodeType === element.ELEMENT_NODE && BLOCK_ELEMENTS.has(element.tagName.toLowerCase());
+}
+
+// Check if an element should be skipped (no translation needed)
+function shouldSkipElement(element) {
+  return element.nodeType === element.ELEMENT_NODE && SKIP_ELEMENTS.has(element.tagName.toLowerCase());
 }
 
 // Generate path for a DOM node (e.g., "html.body.div.0.p.0")
@@ -199,15 +219,12 @@ function extractTextNodes(html, res) {
 
     // Recursively walk the DOM tree and extract HTML with inline tags
     function walk(node) {
-      if (node.nodeType === node.TEXT_NODE) {
-        const text = node.textContent.trim();
-        if (text) {
-          results.push({ path: '', text });
-        }
+      if (node.nodeType !== node.ELEMENT_NODE) {
         return;
       }
 
-      if (node.nodeType !== node.ELEMENT_NODE) {
+      // Skip elements that don't need translation (media, embeds, etc.)
+      if (shouldSkipElement(node)) {
         return;
       }
 
