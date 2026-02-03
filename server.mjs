@@ -325,6 +325,7 @@ async function handleExtract(req, res) {
 
     const selector = CONTAINER_TAGS.join(',');
     const segments = [];
+    const processedElements = new Set(); // Track processed elements to avoid duplicates
 
     $(selector).each((index, element) => {
       const $element = $(element);
@@ -340,8 +341,20 @@ async function handleExtract(req, res) {
         return;
       }
 
+      // Skip if any ancestor has already been processed
+      let $ancestor = $element.parent();
+      while ($ancestor.length > 0 && $ancestor[0].tagName !== 'html' && $ancestor[0].tagName !== 'body') {
+        if (processedElements.has($ancestor[0])) {
+          return; // Skip this element, ancestor already processed the content
+        }
+        $ancestor = $ancestor.parent();
+      }
+
       const pathStr = getPath($element);
       const segId = generatePathHash(pathStr);
+
+      // Mark this element as processed
+      processedElements.add(element);
 
       let text = options.preserveWhitespace ? $element.html() : normalizeWhitespace($element.html());
 
