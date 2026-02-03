@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache dumb-init wget
 
 # Copy package files
-COPY package.json ./
+COPY package.json package-lock.json ./
 
 # Install production dependencies
 RUN npm ci --omit=dev && npm cache clean --force
