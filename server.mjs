@@ -209,7 +209,7 @@ function isBlockElement(element) {
   return element.nodeType === element.ELEMENT_NODE && BLOCK_ELEMENTS.has(element.tagName.toLowerCase());
 }
 
-// Extract text nodes recursively from HTML, merging text split by inline elements
+// Extract text content with inline HTML tags preserved
 function extractTextNodes(html, res) {
   try {
     // Create DOM environment using JSDOM
@@ -218,8 +218,8 @@ function extractTextNodes(html, res) {
 
     const texts = [];
 
-    // Recursively walk the DOM tree and extract text
-    function walk(node, insideBlock = false) {
+    // Recursively walk the DOM tree and extract HTML with inline tags
+    function walk(node) {
       if (node.nodeType === node.TEXT_NODE) {
         const text = node.textContent.trim();
         if (text) {
@@ -235,19 +235,21 @@ function extractTextNodes(html, res) {
       const isBlock = isBlockElement(node);
       const hasBlockChildren = Array.from(node.childNodes).some(child => isBlockElement(child));
 
-      // If this is a block element with no block children, extract its text
+      // If this is a block element with no block children, extract its HTML
       if (isBlock && !hasBlockChildren) {
-        const text = node.textContent.trim();
-        if (text) {
-          const normalizedText = text.replace(/\s+/g, ' ');
-          texts.push(normalizedText);
+        // Get innerHTML to preserve inline tags
+        let html = node.innerHTML;
+        // Trim leading/trailing whitespace and normalize internal whitespace
+        html = html.trim().replace(/\s+/g, ' ');
+        if (html) {
+          texts.push(html);
         }
         return;
       }
 
       // Otherwise, recursively process children
       for (const child of node.childNodes) {
-        walk(child, insideBlock || isBlock);
+        walk(child);
       }
     }
 

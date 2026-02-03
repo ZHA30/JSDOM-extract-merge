@@ -4,7 +4,8 @@ A minimal HTML text node extraction API based on jsdom. Takes raw HTML as input 
 
 ## Features
 
-- **Single Responsibility**: Only extracts text nodes from HTML - no URL fetching, file uploads, or additional features
+- **Preserve Inline Semantics**: Extracts text with all inline HTML tags (em, strong, code, a, span, etc.) preserved
+- **Block Separation**: Each block-level element produces a separate entry
 - **Minimal Interface**: One endpoint (`POST /extract`) with a single output field (`texts`)
 - **Token Authentication**: Simple Bearer token authentication
 - **Zero Configuration**: Works out of the box with sensible defaults
@@ -82,11 +83,11 @@ Authorization: Bearer <your-token>
 }
 ```
 
-The `texts` array contains text content with the following behavior:
+The `texts` array contains HTML fragments with the following behavior:
 
-- **Inline elements merged**: Text split by inline elements (e.g., `<span>`, `<em>`, `<strong>`, `<a>`, `<code>`) is seamlessly joined
-  - Example: `<div><span>W</span>hat if...</div>` → `"What if..."`
-- **Block elements separated**: Each block-level element (e.g., `<p>`, `<h1>`, `<div>`, `<li>`) produces a separate text entry
+- **Inline tags preserved**: All inline elements (em, strong, code, a, span, mark, abbr, cite, etc.) are preserved in the output
+  - Example: `<div><span>W</span>elcome <em>here</em></div>` → `"<span>W</span>elcome <em>here</em>"`
+- **Block elements separated**: Each block-level element (p, h1-h6, div, li, etc.) produces a separate entry
   - Example: `<h1>Title</h1><p>Content</p>` → `["Title", "Content"]`
 - **Whitespace normalized**: Multiple spaces/newlines are collapsed to single spaces
 
@@ -170,11 +171,11 @@ Response:
 }
 ```
 
-**Note**: Inline elements like `<span>` or `<em>` are merged seamlessly:
+**Note**: Inline elements are preserved in the output:
 ```json
 // Input: {"html": "<div><span>W</span>elcome <em>here</em></div>"}
 {
-  "texts": ["Welcome here"]
+  "texts": ["<span>Welcome</span> <em>here</em>"]
 }
 ```
 
@@ -306,34 +307,35 @@ server {
 
 ## How It Works
 
-The API uses jsdom to create a virtual DOM from the provided HTML string. It then traverses the DOM tree starting from the `<body>` element, intelligently extracting text content.
+The API uses jsdom to create a virtual DOM from the provided HTML string. It then traverses the DOM tree starting from the `<body>` element, extracting HTML fragments while preserving inline semantic tags.
 
 **Algorithm**:
 1. Parse HTML using JSDOM
 2. Traverse the DOM tree from `document.body`
 3. For block-level elements (div, p, h1-h6, li, etc.):
-   - If they contain no nested block elements, extract all text as one entry
-   - This merges text split by inline elements (span, em, strong, a, code, etc.)
-4. Return array of extracted text strings
+   - If they contain no nested block elements, extract their innerHTML
+   - This preserves all inline tags (span, em, strong, a, code, mark, etc.)
+4. Return array of HTML fragment strings
 
 **Example**:
 ```html
-<div><span>W</span>hat if you could <em>succeed</em>?</div>
+<div><span>W</span>elcome <em>here</em> and see <code>example</code></div>
 ```
-→ `["What if you could succeed?"]`
+→ `["<span>W</span>elcome <em>here</em> and see <code>example</code>"]`
 
 ```html
 <p>First paragraph</p>
-<p>Second paragraph with <strong>emphasis</strong></p>
+<p>Second with <strong>bold</strong> and <a href="/">link</a></p>
 ```
-→ `["First paragraph", "Second paragraph with emphasis"]`
+→ `["First paragraph", "Second with <strong>bold</strong> and <a href=\"/\">link</a>"]`
 
 ## Known Limitations
 
 - Does not execute JavaScript or render dynamic content
 - Cannot process URLs directly - HTML must be provided as text
 - No caching - each request is processed independently
-- Returns all text nodes including those from `<script>` and `<style>` tags content (if they contain text)
+- Returns content from all elements including `<script>` and `<style>` tags (if present)
+- Inline tags are preserved as-is; no HTML sanitization or escaping is performed
 - Single point of failure - no redundancy built-in
 
 ## License
