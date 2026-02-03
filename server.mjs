@@ -209,21 +209,52 @@ function isBlockElement(element) {
   return element.nodeType === element.ELEMENT_NODE && BLOCK_ELEMENTS.has(element.tagName.toLowerCase());
 }
 
-// Extract text content with inline HTML tags preserved
+// Generate path for a DOM node (e.g., "html.body.div.0.p.0")
+function generatePath(node) {
+  const parts = [];
+  
+  let current = node;
+  while (current && current.nodeType === current.ELEMENT_NODE) {
+    const tag = current.tagName ? current.tagName.toLowerCase() : '';
+    if (tag) {
+      // Get parent element
+      const parent = current.parentElement;
+      if (parent) {
+        // Count same-tag siblings before this node
+        let index = 0;
+        for (let sibling = parent.firstElementChild; sibling; sibling = sibling.nextElementSibling) {
+          if (sibling === current) break;
+          if (sibling.tagName === current.tagName) {
+            index++;
+          }
+        }
+        parts.unshift(`${tag}.${index}`);
+      } else {
+        // No parent, this is the root element
+        parts.unshift(`${tag}.0`);
+      }
+    }
+    current = current.parentElement;
+  }
+  
+  return parts.join('.');
+}
+
+// Extract text content with inline HTML tags preserved, along with paths
 function extractTextNodes(html, res) {
   try {
     // Create DOM environment using JSDOM
     const dom = new JSDOM(html, { url: 'http://localhost' });
     const doc = dom.window.document;
 
-    const texts = [];
+    const results = [];
 
     // Recursively walk the DOM tree and extract HTML with inline tags
     function walk(node) {
       if (node.nodeType === node.TEXT_NODE) {
         const text = node.textContent.trim();
         if (text) {
-          texts.push(text);
+          results.push({ path: '', text });
         }
         return;
       }
@@ -242,7 +273,8 @@ function extractTextNodes(html, res) {
         // Trim leading/trailing whitespace and normalize internal whitespace
         html = html.trim().replace(/\s+/g, ' ');
         if (html) {
-          texts.push(html);
+          const path = generatePath(node);
+          results.push({ path, text: html });
         }
         return;
       }
@@ -261,9 +293,85 @@ function extractTextNodes(html, res) {
     // Close the window to free resources
     dom.window.close();
 
-    return texts;
+    return results;
   } catch (error) {
     log('ERROR', 'HTML processing exception', { error: error.message, stack: error.stack });
+    sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
+    return null;
+  }
+}
+
+// Find a DOM node by path (e.g., "html.0.body.0.div.0.p.0")
+function findByPath(doc, path) {
+  if (!path) return null;
+  
+  const parts = path.split('.');
+  if (parts.length < 4) return null; // Minimum: html.0.body.0.tag.index
+  
+  // Start from html element
+  let currentNode = doc.documentElement; // html element
+  
+  // Skip "html.0", start from "body.0"
+  let i = 2; // Start at body tag
+  while (i < parts.length) {
+    const tag = parts[i];
+    const index = parseInt(parts[i + 1], 10);
+    
+    if (isNaN(index)) return null;
+    
+    // Find the index-th child element with matching tag
+    let found = null;
+    let currentIndex = 0;
+    
+    for (let child = currentNode.firstElementChild; child; child = child.nextElementSibling) {
+      if (child.tagName.toLowerCase() === tag) {
+        if (currentIndex === index) {
+          found = child;
+          break;
+        }
+        currentIndex++;
+      }
+    }
+    
+    if (!found) {
+      log('ERROR', 'Path not found', { path, tag, index, currentTag: currentNode.tagName });
+      return null;
+    }
+    
+    currentNode = found;
+    i += 2;
+  }
+  
+  return currentNode;
+}
+
+// Merge translations into HTML
+function mergeTranslations(html, translations, res) {
+  try {
+    const dom = new JSDOM(html, { url: 'http://localhost' });
+    const doc = dom.window.document;
+    
+    for (const trans of translations) {
+      const node = findByPath(doc, trans.path);
+      
+      if (!node) {
+        log('WARN', 'Path not found', { path: trans.path });
+        sendJsonResponse(res, 400, { error: 'INVALID_PATH', path: trans.path });
+        return null;
+      }
+      
+      // Create bilingual span and append
+      const span = doc.createElement('span');
+      span.innerHTML = `<br>${trans.text}`;
+      node.appendChild(span);
+    }
+    
+    const transhtml = doc.body.innerHTML;
+    dom.window.close();
+    
+    return transhtml;
+  } catch (error) {
+    log('ERROR', 'Merge exception', { error: error.message, stack: error.stack });
     sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
     return null;
   }
@@ -293,19 +401,101 @@ async function handleExtract(req, res) {
     const htmlSize = json.html.length;
     log('INFO', 'Input validated', { requestId, htmlSize });
 
-    // Extract text nodes from HTML
-    const texts = extractTextNodes(json.html, res);
-    if (texts === null) {
+    // Extract text nodes with paths from HTML
+    const results = extractTextNodes(json.html, res);
+    if (results === null) {
       log('ERROR', 'HTML processing failed', { requestId });
       return;
     }
 
-    // Return success response
-    const textCount = texts.length;
-    sendJsonResponse(res, 200, { texts });
+    // Return success response with paths and texts
+    const textCount = results.length;
+    sendJsonResponse(res, 200, { texts: results });
     log('INFO', 'Request completed successfully', { requestId, htmlSize, textCount });
   } catch (error) {
     log('ERROR', 'Unexpected error during processing', { requestId, error: error.message });
+    sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
+  }
+}
+
+// Parse and validate merge input
+function parseMergeInput(req, body, res) {
+  const contentType = req.headers[HEADER_CONTENT_TYPE];
+  if (contentType && !contentType.includes(CONTENT_TYPE_JSON)) {
+    sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
+    return null;
+  }
+
+  let json;
+  try {
+    json = JSON.parse(body);
+  } catch (error) {
+    sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
+    return null;
+  }
+
+  if (!json.hasOwnProperty('html') || typeof json.html !== 'string') {
+    sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
+    return null;
+  }
+
+  if (!json.hasOwnProperty('translations') || !Array.isArray(json.translations)) {
+    sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
+    return null;
+  }
+
+  for (const trans of json.translations) {
+    if (!trans.hasOwnProperty('path') || typeof trans.path !== 'string') {
+      sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
+      return null;
+    }
+    if (!trans.hasOwnProperty('text') || typeof trans.text !== 'string') {
+      sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
+      return null;
+    }
+  }
+
+  if (json.html.length > MAX_HTML_SIZE) {
+    sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
+    return null;
+  }
+
+  return json;
+}
+
+// Handle POST /merge endpoint
+async function handleMerge(req, res) {
+  const requestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+  if (!validateToken(req, res)) {
+    log('WARN', 'Authentication failed', { requestId, ip: req.socket.remoteAddress });
+    return;
+  }
+
+  log('INFO', 'Merge request received', { requestId });
+
+  try {
+    const body = await readRequestBody(req, res);
+    const json = parseMergeInput(req, body, res);
+    if (!json) {
+      log('WARN', 'Invalid merge input', { requestId });
+      return;
+    }
+
+    const htmlSize = json.html.length;
+    const transCount = json.translations.length;
+    log('INFO', 'Merge input validated', { requestId, htmlSize, transCount });
+
+    const transhtml = mergeTranslations(json.html, json.translations, res);
+    if (transhtml === null) {
+      log('ERROR', 'Merge failed', { requestId });
+      return;
+    }
+
+    sendJsonResponse(res, 200, { transhtml });
+    log('INFO', 'Merge completed successfully', { requestId, htmlSize, transCount });
+  } catch (error) {
+    log('ERROR', 'Unexpected error during merge', { requestId, error: error.message });
     sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
   }
 }
@@ -341,6 +531,12 @@ const server = http.createServer(async (req, res) => {
   // Main API endpoint
   if (req.method === 'POST' && req.url === '/extract') {
     await handleExtract(req, res);
+    return;
+  }
+
+  // Merge endpoint
+  if (req.method === 'POST' && req.url === '/merge') {
+    await handleMerge(req, res);
     return;
   }
 

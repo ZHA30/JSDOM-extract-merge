@@ -4,9 +4,10 @@ A minimal HTML text node extraction API based on jsdom. Takes raw HTML as input 
 
 ## Features
 
-- **Preserve Inline Semantics**: Extracts text with all inline HTML tags (em, strong, code, a, span, etc.) preserved
-- **Block Separation**: Each block-level element produces a separate entry
-- **Minimal Interface**: One endpoint (`POST /extract`) with a single output field (`texts`)
+- **Text Extraction**: Extract text content with inline HTML tags (em, strong, code, a, etc.) preserved
+- **Path-Based Navigation**: Each extracted text has a unique path for precise DOM node reference
+- **Translation Merge**: Merge translated content back into original HTML structure
+- **Complete Workflow**: Two endpoints (`POST /extract` and `POST /merge`) for translation pipeline
 - **Token Authentication**: Simple Bearer token authentication
 - **Zero Configuration**: Works out of the box with sensible defaults
 - **Stateless**: No caching, no database, no persistent storage
@@ -48,20 +49,22 @@ npm start
 
 ## API Documentation
 
-### Endpoint
+### Endpoints
+
+#### 1. Extract Text
 
 **`POST /extract`**
 
-Extract all non-empty text nodes from HTML content using jsdom.
+Extract all text content with inline HTML tags from the provided HTML string.
 
-#### Request Headers
+##### Request Headers
 
 ```http
 Content-Type: application/json
 Authorization: Bearer <your-token>
 ```
 
-#### Request Body
+##### Request Body
 
 ```json
 {
@@ -73,31 +76,73 @@ Authorization: Bearer <your-token>
 |-------|--------|----------|---------------------------------|
 | `html` | string | Yes      | Raw HTML string to process      |
 
-#### Response
+##### Response
 
-##### Success (200 OK)
+###### Success (200 OK)
 
 ```json
 {
-  "texts": ["Extracted text 1", "Extracted text 2", "..."]
+  "texts": [
+    { "path": "html.0.body.0.div.0.h1.0", "text": "Title" },
+    { "path": "html.0.body.0.div.0.p.0", "text": "Paragraph with <strong>bold</strong>" }
+  ]
 }
 ```
 
-The `texts` array contains HTML fragments with the following behavior:
+- **path**: Unique DOM path for each text block (used for merge)
+- **text**: HTML fragment with inline tags preserved
 
-- **Inline tags preserved**: All inline elements (em, strong, code, a, span, mark, abbr, cite, etc.) are preserved in the output
-  - Example: `<div><span>W</span>elcome <em>here</em></div>` → `"<span>W</span>elcome <em>here</em>"`
-- **Block elements separated**: Each block-level element (p, h1-h6, div, li, etc.) produces a separate entry
-  - Example: `<h1>Title</h1><p>Content</p>` → `["Title", "Content"]`
-- **Whitespace normalized**: Multiple spaces/newlines are collapsed to single spaces
+#### 2. Merge Translations
+
+**`POST /merge`**
+
+Merge translated content back into the original HTML structure.
+
+##### Request Headers
+
+```http
+Content-Type: application/json
+Authorization: Bearer <your-token>
+```
+
+##### Request Body
+
+```json
+{
+  "html": "<string>",
+  "translations": [
+    { "path": "<string>", "text": "<string>" }
+  ]
+}
+```
+
+| Field          | Type   | Required | Description                                      |
+|----------------|--------|----------|--------------------------------------------------|
+| `html`         | string | Yes      | Original HTML string                              |
+| `translations` | array  | Yes      | Array of translations with corresponding paths   |
+| `translations[].path` | string | Yes | DOM path from /extract response                  |
+| `translations[].text` | string | Yes | Translated content (may contain inline HTML tags) |
+
+##### Response
+
+###### Success (200 OK)
+
+```json
+{
+  "transhtml": "<div><p>Hello<span><br>你好</span></p></div>"
+}
+```
+
+Returns the original HTML with translations appended to each block.
 
 ##### Error Responses
 
 | Status Code | Error               | Description                                             |
 |-------------|---------------------|---------------------------------------------------------|
 | 401         | `AUTH_REQUIRED`     | Missing or invalid Authorization header/token           |
-| 400         | `INVALID_INPUT`     | Invalid JSON, missing html field, or html size exceeds 10MB |
-| 500         | `PROCESSING_ERROR`  | HTML parsing failed                                     |
+| 400         | `INVALID_INPUT`     | Invalid JSON, missing required fields, or size exceeds 10MB |
+| 400         | `INVALID_PATH`      | Path not found in HTML structure                        |
+| 500         | `PROCESSING_ERROR`  | HTML parsing/merge failed                               |
 | 404         | `NOT_FOUND`         | Invalid endpoint                                        |
 
 ### Health Check
@@ -155,47 +200,85 @@ All logs are written to stdout/stderr, making them compatible with:
 
 ## Usage Examples
 
-### cURL
+### Complete Translation Workflow
 
 ```bash
+# Step 1: Extract text with paths
 curl -X POST http://localhost:3000/extract \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-token-here" \
-  -d '{"html": "<div><h1>Title</h1><p>Paragraph 1</p><p>Paragraph 2</p></div>"}'
+  -d '{"html": "<div><h1>Title</h1><p>Paragraph with <strong>bold</strong></p></div>"}'
 ```
 
 Response:
 ```json
 {
-  "texts": ["Title", "Paragraph 1", "Paragraph 2"]
+  "texts": [
+    {"path": "html.0.body.0.div.0.h1.0", "text": "Title"},
+    {"path": "html.0.body.0.div.0.p.0", "text": "Paragraph with <strong>bold</strong>"}
+  ]
 }
 ```
 
-**Note**: Inline elements are preserved in the output:
+```bash
+# Step 2: (External) Translate the texts
+# Step 3: Merge translations back
+
+curl -X POST http://localhost:3000/merge \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-token-here" \
+  -d '{
+    "html": "<div><h1>Title</h1><p>Paragraph with <strong>bold</strong></p></div>",
+    "translations": [
+      {"path": "html.0.body.0.div.0.h1.0", "text": "标题"},
+      {"path": "html.0.body.0.div.0.p.0", "text": "带有<strong>粗体</strong>的段落"}
+    ]
+  }'
+```
+
+Response:
 ```json
-// Input: {"html": "<div><span>W</span>elcome <em>here</em></div>"}
 {
-  "texts": ["<span>Welcome</span> <em>here</em>"]
+  "transhtml": "<div><h1>Title<span><br>标题</span></h1><p>Paragraph with <strong>bold</strong><span><br>带有<strong>粗体</strong>的段落</span></p></div>"
 }
 ```
 
 ### JavaScript/Node.js
 
 ```javascript
-const response = await fetch('http://localhost:3000/extract', {
+// Step 1: Extract
+const extractRes = await fetch('http://localhost:3000/extract', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer your-token-here'
   },
   body: JSON.stringify({
-    html: '<div><h1>Article Title</h1><p>Article content...</p></div>'
+    html: '<div><h1>Title</h1><p>Content</p></div>'
   })
 });
+const { texts } = await extractRes.json();
+// [{path: "...", text: "Title"}, {path: "...", text: "Content"}]
 
-const result = await response.json();
-console.log(result.texts);
-// Output: ["Article Title", "Article content..."]
+// Step 2: Translate (using your translation service)
+const translations = texts.map(item => ({
+  path: item.path,
+  text: await translate(item.text) // your translation function
+}));
+
+// Step 3: Merge
+const mergeRes = await fetch('http://localhost:3000/merge', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer your-token-here'
+  },
+  body: JSON.stringify({
+    html: '<div><h1>Title</h1><p>Content</p></div>',
+    translations
+  })
+});
+const { transhtml } = await mergeRes.json();
 ```
 
 ### Python
@@ -203,20 +286,38 @@ console.log(result.texts);
 ```python
 import requests
 
-response = requests.post(
+# Step 1: Extract
+extract_res = requests.post(
     'http://localhost:3000/extract',
     headers={
         'Content-Type': 'application/json',
         'Authorization': 'Bearer your-token-here'
     },
     json={
-        'html': '<div><h1>Article Title</h1><p>Article content...</p></div>'
+        'html': '<div><h1>Title</h1><p>Content</p></div>'
     }
 )
+texts = extract_res.json()['texts']
 
-result = response.json()
-print(result['texts'])
-# Output: ['Article Title', 'Article content...']
+# Step 2: Translate
+translations = [
+    {'path': item['path'], 'text': translate(item['text'])}
+    for item in texts
+]
+
+# Step 3: Merge
+merge_res = requests.post(
+    'http://localhost:3000/merge',
+    headers={
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer your-token-here'
+    },
+    json={
+        'html': '<div><h1>Title</h1><p>Content</p></div>',
+        'translations': translations
+    }
+)
+transhtml = merge_res.json()['transhtml']
 ```
 
 ## Configuration
@@ -336,6 +437,7 @@ The API uses jsdom to create a virtual DOM from the provided HTML string. It the
 - No caching - each request is processed independently
 - Returns content from all elements including `<script>` and `<style>` tags (if present)
 - Inline tags are preserved as-is; no HTML sanitization or escaping is performed
+- Path-based merge requires the original HTML structure to remain unchanged
 - Single point of failure - no redundancy built-in
 
 ## License
