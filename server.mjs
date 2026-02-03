@@ -3,6 +3,24 @@ import fs from 'fs';
 import path from 'path';
 import * as cheerio from 'cheerio';
 
+// Logging helper (must be defined before use)
+function log(level, message, context = {}) {
+  const timestamp = new Date().toISOString();
+  const logEntry = { timestamp, level, message, ...context };
+  const logLine = JSON.stringify(logEntry);
+
+  switch (level) {
+    case 'ERROR':
+      console.error(logLine);
+      break;
+    case 'WARN':
+      console.warn(logLine);
+      break;
+    default:
+      console.log(logLine);
+  }
+}
+
 // Configuration from environment variables
 const PORT = process.env.PORT || 3000;
 const API_TOKEN = process.env.API_BEARER_TOKEN || process.env.API_TOKEN;
@@ -67,24 +85,6 @@ const ERRORS = {
 function sendJsonResponse(res, statusCode, data) {
   res.writeHead(statusCode, { 'Content-Type': CONTENT_TYPE_JSON });
   res.end(JSON.stringify(data));
-}
-
-// Logging helper
-function log(level, message, context = {}) {
-  const timestamp = new Date().toISOString();
-  const logEntry = { timestamp, level, message, ...context };
-  const logLine = JSON.stringify(logEntry);
-
-  switch (level) {
-    case 'ERROR':
-      console.error(logLine);
-      break;
-    case 'WARN':
-      console.warn(logLine);
-      break;
-    default:
-      console.log(logLine);
-  }
 }
 
 // Validate Bearer Token
@@ -297,6 +297,73 @@ function hasIgnoredClass($element, ignoredClasses) {
   return ignoredClasses.some(ignored => elementClasses.includes(ignored));
 }
 
+// Check if tag should be excluded (non-translatable)
+function isExcludedTag(tagName) {
+  return EXCLUDED_TAGS.includes(tagName);
+}
+
+// Check if tag is inline (should be preserved)
+function isInlineTag(tagName) {
+  return TAGS_INLINE.includes(tagName);
+}
+
+// Attributes to preserve in inline tags
+const PRESERVED_ATTRIBUTES = ['href', 'class', 'id', 'title', 'target', 'rel', 'alt', 'srcset'];
+
+// Build attributes string for an element
+function buildAttributes(node) {
+  if (!node.attributes || node.attributes.length === 0) {
+    return '';
+  }
+  
+  const attrs = [];
+  for (const attr of node.attributes) {
+    if (PRESERVED_ATTRIBUTES.includes(attr.name)) {
+      const value = attr.value ? `="${attr.value}"` : '';
+      attrs.push(`${attr.name}${value}`);
+    }
+  }
+  
+  return attrs.length > 0 ? ' ' + attrs.join(' ') : '';
+}
+
+// Recursively build HTML with inline tags only, excluding non-translatable elements
+function buildInlineHTML(node) {
+  // Text node
+  if (node.nodeType === 3) {
+    return node.nodeValue;
+  }
+  
+  // Element node
+  if (node.nodeType === 1) {
+    const tagName = node.tagName?.toLowerCase();
+    
+    // Skip excluded tags
+    if (isExcludedTag(tagName)) {
+      return '';
+    }
+    
+    // Get all child nodes
+    const children = node.childNodes || [];
+    let innerHTML = '';
+    
+    for (const child of children) {
+      innerHTML += buildInlineHTML(child);
+    }
+    
+    // If it's an inline tag, wrap the content with preserved attributes
+    if (isInlineTag(tagName)) {
+      const attrs = buildAttributes(node);
+      return `<${tagName}${attrs}>${innerHTML}</${tagName}>`;
+    }
+    
+    // Otherwise just return inner content (block tags are unwrapped)
+    return innerHTML;
+  }
+  
+  return '';
+}
+
 // Handle POST /extract endpoint
 async function handleExtract(req, res) {
   const requestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -356,7 +423,12 @@ async function handleExtract(req, res) {
       // Mark this element as processed
       processedElements.add(element);
 
-      let text = options.preserveWhitespace ? $element.html() : normalizeWhitespace($element.html());
+      // Build HTML with inline tags preserved, excluding non-translatable elements
+      let text = buildInlineHTML(element);
+
+      if (!options.preserveWhitespace) {
+        text = normalizeWhitespace(text);
+      }
 
       if (text && text.trim()) {
         segments.push({
