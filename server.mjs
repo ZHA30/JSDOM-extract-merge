@@ -195,7 +195,21 @@ function parseInput(req, body, res) {
   return json;
 }
 
-// Extract text nodes recursively from HTML
+// List of block-level elements that should separate text content
+const BLOCK_ELEMENTS = new Set([
+  'address', 'article', 'aside', 'blockquote', 'canvas', 'dd', 'div',
+  'dl', 'dt', 'fieldset', 'figcaption', 'figure', 'footer', 'form',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main',
+  'nav', 'noscript', 'ol', 'output', 'p', 'pre', 'section', 'table',
+  'tfoot', 'ul', 'video', 'tr', 'td', 'th', 'thead', 'tbody', 'colgroup'
+]);
+
+// Check if an element is a block-level element
+function isBlockElement(element) {
+  return element.nodeType === element.ELEMENT_NODE && BLOCK_ELEMENTS.has(element.tagName.toLowerCase());
+}
+
+// Extract text nodes recursively from HTML, merging text split by inline elements
 function extractTextNodes(html, res) {
   try {
     // Create DOM environment using JSDOM
@@ -204,23 +218,43 @@ function extractTextNodes(html, res) {
 
     const texts = [];
 
-    // Recursively walk the DOM tree and extract text nodes
-    function walk(node) {
-      for (const child of node.childNodes) {
-        if (child.nodeType === child.TEXT_NODE) {
-          const text = child.textContent.trim();
-          if (text) {
-            texts.push(text);
-          }
-        } else {
-          // Recursively traverse child nodes
-          walk(child);
+    // Recursively walk the DOM tree and extract text
+    function walk(node, insideBlock = false) {
+      if (node.nodeType === node.TEXT_NODE) {
+        const text = node.textContent.trim();
+        if (text) {
+          texts.push(text);
         }
+        return;
+      }
+
+      if (node.nodeType !== node.ELEMENT_NODE) {
+        return;
+      }
+
+      const isBlock = isBlockElement(node);
+      const hasBlockChildren = Array.from(node.childNodes).some(child => isBlockElement(child));
+
+      // If this is a block element with no block children, extract its text
+      if (isBlock && !hasBlockChildren) {
+        const text = node.textContent.trim();
+        if (text) {
+          const normalizedText = text.replace(/\s+/g, ' ');
+          texts.push(normalizedText);
+        }
+        return;
+      }
+
+      // Otherwise, recursively process children
+      for (const child of node.childNodes) {
+        walk(child, insideBlock || isBlock);
       }
     }
 
-    // Start traversal from document body
-    walk(doc.body);
+    // Start traversal from document body children
+    for (const child of doc.body.childNodes) {
+      walk(child);
+    }
 
     // Close the window to free resources
     dom.window.close();

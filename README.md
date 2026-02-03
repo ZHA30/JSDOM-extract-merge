@@ -82,7 +82,13 @@ Authorization: Bearer <your-token>
 }
 ```
 
-The `texts` array contains all non-empty text nodes in depth-first traversal order.
+The `texts` array contains text content with the following behavior:
+
+- **Inline elements merged**: Text split by inline elements (e.g., `<span>`, `<em>`, `<strong>`, `<a>`, `<code>`) is seamlessly joined
+  - Example: `<div><span>W</span>hat if...</div>` → `"What if..."`
+- **Block elements separated**: Each block-level element (e.g., `<p>`, `<h1>`, `<div>`, `<li>`) produces a separate text entry
+  - Example: `<h1>Title</h1><p>Content</p>` → `["Title", "Content"]`
+- **Whitespace normalized**: Multiple spaces/newlines are collapsed to single spaces
 
 ##### Error Responses
 
@@ -161,6 +167,14 @@ Response:
 ```json
 {
   "texts": ["Title", "Paragraph 1", "Paragraph 2"]
+}
+```
+
+**Note**: Inline elements like `<span>` or `<em>` are merged seamlessly:
+```json
+// Input: {"html": "<div><span>W</span>elcome <em>here</em></div>"}
+{
+  "texts": ["Welcome here"]
 }
 ```
 
@@ -292,17 +306,27 @@ server {
 
 ## How It Works
 
-The API uses jsdom to create a virtual DOM from the provided HTML string. It then recursively traverses the DOM tree starting from the `<body>` element, extracting all text nodes that have non-whitespace content.
+The API uses jsdom to create a virtual DOM from the provided HTML string. It then traverses the DOM tree starting from the `<body>` element, intelligently extracting text content.
 
 **Algorithm**:
 1. Parse HTML using JSDOM
-2. Start recursive traversal from `document.body`
-3. For each node:
-   - If it's a text node (`TEXT_NODE`) and has non-whitespace content, add to result
-   - Otherwise, recursively traverse all child nodes
+2. Traverse the DOM tree from `document.body`
+3. For block-level elements (div, p, h1-h6, li, etc.):
+   - If they contain no nested block elements, extract all text as one entry
+   - This merges text split by inline elements (span, em, strong, a, code, etc.)
 4. Return array of extracted text strings
 
-**Note**: Text nodes are extracted in depth-first traversal order, which matches the natural reading order of the HTML document.
+**Example**:
+```html
+<div><span>W</span>hat if you could <em>succeed</em>?</div>
+```
+→ `["What if you could succeed?"]`
+
+```html
+<p>First paragraph</p>
+<p>Second paragraph with <strong>emphasis</strong></p>
+```
+→ `["First paragraph", "Second paragraph with emphasis"]`
 
 ## Known Limitations
 
