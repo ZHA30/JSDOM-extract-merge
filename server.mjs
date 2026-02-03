@@ -40,8 +40,8 @@ const CONTAINER_TAGS = [
   'nav', 'ol', 'ul', 'td', 'th', 'tr', 'tbody', 'thead', 'tfoot'
 ];
 
-// Inline tags (preserved within text)
-const INLINE_TAGS = [
+// Inline tags
+const TAGS_INLINE = [
   'a', 'b', 'strong', 'i', 'em', 'u', 'span', 'mark',
   'small', 'sub', 'sup', 'time', 'q', 's', 'strike',
   'del', 'ins', 'abbr', 'acronym', 'cite'
