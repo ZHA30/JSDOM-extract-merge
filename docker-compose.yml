@@ -5,17 +5,14 @@ services:
       dockerfile: Dockerfile
     container_name: cheerio-transerver
     ports:
-      - "8080:8080"
+      - "3000:3000"
     environment:
-      - PORT=8080
+      - PORT=3000
       - NODE_ENV=development
-      - API_BEARER_TOKEN=dev-secret-token-please-change-in-production
-      - MAX_PAYLOAD_SIZE=10485760
-      - REQUEST_TIMEOUT=30000
-      - GRACEFUL_SHUTDOWN_TIMEOUT=30000
+      - API_TOKEN=dev-secret-token-please-change-in-production
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider --quiet --tries=1 --timeout=3 http://localhost:8080/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget --spider --quiet --tries=1 --timeout=3 http://localhost:3000/healthz || exit 1"]
       interval: 30s
       timeout: 3s
       retries: 3

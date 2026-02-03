@@ -1,30 +1,29 @@
 # Cheerio-transerver
 
-A stateless, high-performance HTML parsing middleware service for translation workflows. This service extracts translatable text segments from HTML while preserving inline formatting tags, and merges translated content back into the original HTML structure.
+A stateless, high-performance HTML parsing middleware service for translation workflows.
 
 ## Features
 
 - **Text Extraction**: Extract translatable text segments from HTML while preserving inline formatting
 - **Translation Merging**: Merge translated text back into HTML maintaining original structure
-- **Smart Filtering**: Automatically excludes script, style, code, and other non-translatable blocks
-- **Inline Tags Preservation**: Preserves `<a>`, `<strong>`, `<em>`, `<i>`, `<span>`, `<u>` within extracted text
+- **Smart Filtering**: Automatically excludes script, style, and code blocks
+- **Inline Tags Preservation**: Preserves `<a>`, `<strong>`, `<em>`, `<i>`, `<span>`, `<u>`
 - **Security**: Bearer token authentication for all API operations
-- **Health Monitoring**: Enhanced health checks with memory, uptime, and version info
-- **Docker Ready**: Production-ready Docker configuration with health checks
+- **Lightweight**: Minimal dependencies - only cheerio required
 
 ## Quick Start
 
-### Docker (Recommended)
+### Docker
 
 ```bash
 # Build and start service
 docker-compose up --build
 
-# Or build and run in background
+# Or run in background
 docker-compose up --build -d
 
 # Check service health
-curl http://localhost:8080/healthz
+curl http://localhost:3000/healthz
 ```
 
 ### Local Development
@@ -33,10 +32,13 @@ curl http://localhost:8080/healthz
 # Install dependencies
 npm install
 
-# Set API_BEARER_TOKEN environment variable
-export API_BEARER_TOKEN=your-secret-token
+# Copy environment variables
+cp .env.example .env
 
-# Start development server
+# Edit .env with your configuration
+# API_TOKEN=your-secret-token
+
+# Start server
 npm run dev
 ```
 
@@ -44,12 +46,10 @@ npm run dev
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Server port | `8080` |
+| `PORT` | Server port | `3000` |
 | `NODE_ENV` | Environment (development, production) | `development` |
-| `API_BEARER_TOKEN` | Bearer token for API authentication | **Required** |
-| `MAX_PAYLOAD_SIZE` | Maximum request payload size in bytes | `10485760` (10MB) |
-| `REQUEST_TIMEOUT` | Request timeout in milliseconds | `30000` (30s) |
-| `GRACEFUL_SHUTDOWN_TIMEOUT` | Graceful shutdown timeout in milliseconds | `30000` (30s) |
+| `API_TOKEN` | Bearer token for API authentication | **Required** |
+| `MAX_HTML_SIZE` | Maximum HTML size in bytes | `10485760` (10MB) |
 
 ## API Endpoints
 
@@ -59,7 +59,7 @@ npm run dev
 GET /healthz
 ```
 
-Returns service health status for Docker/Kubernetes health probes.
+Returns service health status.
 
 **Response:**
 ```json
@@ -82,12 +82,11 @@ Returns service health status for Docker/Kubernetes health probes.
 ```http
 POST /extract
 Content-Type: application/json
-Authorization: Bearer your-secret-token
+Authorization: Bearer your-token
 
 {
   "html": "<p>Hello <strong>world</strong></p>",
   "options": {
-    "extractAttributes": ["alt", "title"],
     "ignoredClasses": ["notranslate", "code-snippet"],
     "preserveWhitespace": false
   }
@@ -97,9 +96,8 @@ Authorization: Bearer your-secret-token
 **Request Body:**
 - `html` (required): HTML content to parse
 - `options` (optional):
-  - `extractAttributes`: Array of attributes to extract (alt, placeholder, title)
   - `ignoredClasses`: CSS classes to skip during extraction
-  - `preserveWhitespace`: Whether to preserve whitespace in extracted text
+  - `preserveWhitespace`: Whether to preserve whitespace
 
 **Response:**
 ```json
@@ -109,27 +107,25 @@ Authorization: Bearer your-secret-token
       "id": "aHRtbC5ib2R5WzBdLnBbMF0=",
       "text": "Hello <strong>world</strong>",
       "path": "html.body.p[0]",
-      "tag": "p",
-      "attributes": {}
+      "tag": "p"
     }
   ],
   "count": 1
 }
 ```
 
-**Error Responses:**
-- `400 INVALID_STRUCTURE`: HTML format is malformed
-- `403 UNAUTHORIZED`: Missing or invalid bearer token
-- `413 PAYLOAD_TOO_LARGE`: Request exceeds 10MB limit
-- `422 VALIDATION_ERROR`: Invalid request format
-- `500 PROCESS_TIMEOUT`: Processing exceeded 30s timeout
+**Error Codes:**
+- `403` - Missing or invalid authorization
+- `413` - Request exceeds 10MB limit
+- `422` - Invalid request format
+- `500` - Processing error
 
 ### Merge Translations
 
 ```http
 POST /merge
 Content-Type: application/json
-Authorization: Bearer your-secret-token
+Authorization: Bearer your-token
 
 {
   "html": "<p>Hello</p>",
@@ -152,8 +148,8 @@ Authorization: Bearer your-secret-token
   - `id`: Segment ID from extract response
   - `text`: Translated HTML text (may contain inline tags)
 - `options` (optional):
-  - `safetyCheck`: Validate unclosed tags in translations (default: true)
-  - `strictMode`: Throw error if any segment ID is not found (default: false)
+  - `safetyCheck`: Validate unclosed tags in translations
+  - `strictMode`: Throw error if any segment ID is not found
 
 **Response:**
 ```json
@@ -163,52 +159,36 @@ Authorization: Bearer your-secret-token
 }
 ```
 
-**Error Responses:**
-- `400 INVALID_STRUCTURE`: HTML format is malformed or unclosed tags detected
-- `403 UNAUTHORIZED`: Missing or invalid bearer token
-- `413 PAYLOAD_TOO_LARGE`: Request exceeds 10MB limit
-- `422 VALIDATION_ERROR`: Invalid request format
-- `500 PROCESS_TIMEOUT`: Processing exceeded 30s timeout
+**Error Codes:**
+- `400` - Invalid HTML structure or unclosed tags
+- `403` - Missing or invalid authorization
+- `413` - Request exceeds 10MB limit
+- `422` - Invalid request format
+- `500` - Processing error
 
-## Examples
-
-### Extract and Merge
+## Example Usage
 
 ```bash
-TOKEN="your-secret-token"
+TOKEN="your-token"
 
-# 1. Extract text segments
-EXTRACT_RESPONSE=$(curl -s -X POST http://localhost:8080/extract \
+# Extract segments
+curl -X POST http://localhost:3000/extract \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"html":"<div><h1>Welcome</h1><p>Hello <strong>world</strong></p></div>"}'
+
+# Merge translations
+curl -X POST http://localhost:3000/merge \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
-    "html": "<div><h1>Welcome</h1><p>Read <a href=\"/doc\">this</a> guide.</p></div>"
-  }')
-
-echo "$EXTRACT_RESPONSE"
-
-# 2. Translate (use your translation service)
-# Example: "Welcome" -> "欢迎"
-
-# 3. Merge translations back
-curl -X POST http://localhost:8080/merge \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "html": "<div><h1>Welcome</h1><p>Read <a href=\"/doc\">this</a> guide.</p></div>",
+    "html": "<div><h1>Welcome</h1><p>Hello <strong>world</strong></p></div>",
     "translations": [
       {
         "id": "html.body.div[0].h1[0]",
         "text": "欢迎"
-      },
-      {
-        "id": "html.body.div[0].p[0]",
-        "text": "阅读 <a href=\"/doc\">本</a> 指南。"
       }
-    ],
-    "options": {
-      "safetyCheck": true
-    }
+    ]
   }'
 ```
 
@@ -218,24 +198,9 @@ curl -X POST http://localhost:8080/merge \
 `p`, `div`, `li`, `h1-h6`, `section`, `article`, `aside`, `blockquote`, `dd`, `dt`, `dl`, `fieldset`, `figcaption`, `figure`, `footer`, `header`, `main`, `nav`, `ol`, `ul`, `td`, `th`, `tr`, `tbody`, `thead`, `tfoot`
 
 ### Inline Tags (Preserved within text)
-These tags are not split and remain within extracted text:
+`a`, `b`, `strong`, `i`, `em`, `u`, `span`, `mark`, `small`, `sub`, `sup`, `time`, `q`, `s`, `strike`, `del`, `ins`, `abbr`, `acronym`, `cite`
 
-| Tag | Description |
-|-----|-------------|
-| `<a>` | Anchor link |
-| `<b>`, `<strong>` | Bold text |
-| `<i>`, `<em>` | Italic text |
-| `<u>` | Underlined text |
-| `<span>` | Generic inline container |
-| `<mark>` | Highlighted text |
-| `<small>` | Small text |
-| `<sub>`, `<sup>` | Subscript/superscript |
-| `<time>` | Time/date |
-| `<q>` | Inline quote |
-| `<s>`, `<strike>`, `<del>` | Strikethrough/deleted text |
-| `<ins>` | Inserted text |
-
-### Excluded Tags (Ignored completely)
+### Excluded Tags (Ignored)
 `script`, `style`, `pre`, `code`, `canvas`, `svg`, `noscript`, `iframe`, `video`, `audio`, `object`, `embed`, `applet`, `meta`, `link`
 
 ## Deployment
@@ -248,8 +213,8 @@ docker build -t cheerio-transerver:latest .
 
 # Run container
 docker run -d \
-  -p 8080:8080 \
-  -e API_BEARER_TOKEN=your-production-token \
+  -p 3000:3000 \
+  -e API_TOKEN=your-production-token \
   -e NODE_ENV=production \
   cheerio-transerver:latest
 ```
@@ -270,7 +235,3 @@ docker-compose down
 ## License
 
 MIT
-
-## Support
-
-For issues or questions, please open an issue on GitHub.
