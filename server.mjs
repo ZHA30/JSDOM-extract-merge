@@ -156,6 +156,7 @@ const BLOCK_ELEMENTS = new Set([
 const SKIP_ELEMENTS = new Set([
   'figure',      // Images/figures with captions
   'picture',     // Picture containers
+  'img',         // Images
   'svg',         // SVG graphics
   'canvas',      // Canvas elements
   'iframe',      // Embedded content
@@ -164,17 +165,40 @@ const SKIP_ELEMENTS = new Set([
   'map',         // Image maps
   'object',      // Embedded objects
   'embed',       // Embedded content
-  'noscript'     // No-script content
+  'noscript',    // No-script content
+  'track',       // Text tracks for media
+  'source'       // Media sources
 ]);
+
+// Check if an element should be skipped (no translation needed)
+function shouldSkipElement(element) {
+  return element.nodeType === element.ELEMENT_NODE && SKIP_ELEMENTS.has(element.tagName.toLowerCase());
+}
 
 // Check if an element is a block-level element
 function isBlockElement(element) {
   return element.nodeType === element.ELEMENT_NODE && BLOCK_ELEMENTS.has(element.tagName.toLowerCase());
 }
 
-// Check if an element should be skipped (no translation needed)
-function shouldSkipElement(element) {
-  return element.nodeType === element.ELEMENT_NODE && SKIP_ELEMENTS.has(element.tagName.toLowerCase());
+// Check if an element contains only media elements (no translatable text)
+function containsOnlyMedia(element) {
+  if (element.nodeType !== element.ELEMENT_NODE) {
+    return false;
+  }
+
+  // Get all text content, excluding media elements
+  const clone = element.cloneNode(true);
+  
+  // Remove all media elements from clone
+  const mediaSelectors = Array.from(SKIP_ELEMENTS).join(',');
+  const mediaElements = clone.querySelectorAll(mediaSelectors);
+  mediaElements.forEach(el => el.remove());
+  
+  // Get remaining text content
+  const textContent = clone.textContent.trim();
+  
+  // If no text remains, this element only contains media
+  return textContent.length === 0;
 }
 
 // Generate path for a DOM node (e.g., "html.body.div.0.p.0")
@@ -233,8 +257,18 @@ function extractTextNodes(html, res) {
 
       // If this is a block element with no block children, extract its HTML
       if (isBlock && !hasBlockChildren) {
-        // Get innerHTML to preserve inline tags
-        let html = node.innerHTML;
+        // Skip elements that contain only media (no translatable text)
+        if (containsOnlyMedia(node)) {
+          return;
+        }
+        
+        // Get innerHTML to preserve inline tags, but remove media elements
+        let clone = node.cloneNode(true);
+        const mediaSelectors = Array.from(SKIP_ELEMENTS).join(',');
+        const mediaElements = clone.querySelectorAll(mediaSelectors);
+        mediaElements.forEach(el => el.remove());
+        
+        let html = clone.innerHTML;
         // Trim leading/trailing whitespace and normalize internal whitespace
         html = html.trim().replace(/\s+/g, ' ');
         if (html) {
