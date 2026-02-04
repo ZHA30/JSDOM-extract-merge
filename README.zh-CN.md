@@ -51,7 +51,7 @@ npm start
 
 ### POST /merge
 
-将翻译内容合并回 HTML。
+将翻译内容合并回 HTML，生成双语页面（原文 + 译文）。
 
 **请求：**
 ```json
@@ -67,7 +67,31 @@ npm start
 **响应：**
 ```json
 {
-  "transhtml": "<div><h1>Title<span><br>标题</span></h1><p>Content<span><br>内容</span></p></div>"
+  "transhtml": "<div><h1>Title<span class=\"jsdom-extract-merge\"><br>标题</span></h1><p>Content<span class=\"jsdom-extract-merge\"><br>内容</span></p></div>"
+}
+```
+
+> **注意：** 翻译内容被包裹在带有 `class="jsdom-extract-merge"` 属性的 `<span>` 元素中，便于样式定制。
+
+### POST /replace
+
+将内容替换为翻译（纯译文模式）。
+
+**请求：**
+```json
+{
+  "html": "<div><h1>Title</h1><p>Content</p></div>",
+  "translations": [
+    { "path": "html.0.body.0.div.0.h1.0", "text": "标题" },
+    { "path": "html.0.body.0.div.0.p.0", "text": "内容" }
+  ]
+}
+```
+
+**响应：**
+```json
+{
+  "transhtml": "<div><h1>标题</h1><p>内容</p></div>"
 }
 ```
 
@@ -98,8 +122,19 @@ html.0.body.0.div.0.p.0
 行内标签（保留在输出中）：`<a>`, `<em>`, `<strong>`, `<code>`, `<span>` 等
 
 ## 配置
+ - 双语模式（原文 + 译文）
+curl -X POST http://localhost:3000/merge \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "html": "<div><p>Hello <em>world</em></p></div>",
+    "translations": [
+      {"path": "html.0.body.0.div.0.p.0", "text": "你好 <em>世界</em>"}
+    ]
+  }'
 
-| 变量 | 必填 | 默认值 | 说明 |
+# 或使用替换 - 纯译文模式
+curl -X POST http://localhost:3000/replac
 |----------|----------|---------|-------------|
 | `PORT` | 否 | 3000 | 服务端口 |
 | `API_TOKEN` | 是 | - | Bearer 认证令牌 |
@@ -155,7 +190,28 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - API_TOKEN=${API_TOKEN}
+   样式定制
+
+`/merge` 端点将翻译内容包裹在 `<span class="jsdom-extract-merge">` 元素中，便于样式定制：
+
+```css
+/* 简单的行内样式 */
+.jsdom-extract-merge {
+  color: #0066cc;
+  font-style: italic;
+}
+
+/* 块级样式，更好的分隔效果 */
+.jsdom-extract-merge {
+  display: block;
+  margin-top: 0.5em;
+  padding: 0.5em;
+  background-color: #f0f8ff;
+  border-left: 3px solid #0066cc;
+}
+```
+
+##    - API_TOKEN=${API_TOKEN}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/healthz', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]

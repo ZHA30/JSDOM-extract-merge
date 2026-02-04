@@ -47,7 +47,7 @@ Extract text content with inline tags and DOM paths.
 
 ### POST /merge
 
-Merge translated content back into HTML.
+Merge translated content back into HTML as bilingual (original + translation).
 
 **Request:**
 ```json
@@ -63,7 +63,31 @@ Merge translated content back into HTML.
 **Response:**
 ```json
 {
-  "transhtml": "<div><h1>Title<span><br>标题</span></h1><p>Content<span><br>内容</span></p></div>"
+  "transhtml": "<div><h1>Title<span class=\"jsdom-extract-merge\"><br>标题</span></h1><p>Content<span class=\"jsdom-extract-merge\"><br>内容</span></p></div>"
+}
+```
+
+> **Note:** Translated content is wrapped in a `<span>` element with `class="jsdom-extract-merge"` for easy styling.
+
+### POST /replace
+
+Replace content with translations (pure translation mode).
+
+**Request:**
+```json
+{
+  "html": "<div><h1>Title</h1><p>Content</p></div>",
+  "translations": [
+    { "path": "html.0.body.0.div.0.h1.0", "text": "标题" },
+    { "path": "html.0.body.0.div.0.p.0", "text": "内容" }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "transhtml": "<div><h1>标题</h1><p>内容</p></div>"
 }
 ```
 
@@ -94,8 +118,19 @@ Preserved elements (extracted with content):
 Inline tags (preserved in output): `<a>`, `<em>`, `<strong>`, `<code>`, `<span>`, etc.
 
 ## Configuration
+ - Bilingual mode (original + translation)
+curl -X POST http://localhost:3000/merge \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "html": "<div><p>Hello <em>world</em></p></div>",
+    "translations": [
+      {"path": "html.0.body.0.div.0.p.0", "text": "你好 <em>世界</em>"}
+    ]
+  }'
 
-| Variable | Required | Default | Description |
+# Or use Replace - Pure translation mode
+curl -X POST http://localhost:3000/replaciption |
 |----------|----------|---------|-------------|
 | `PORT` | No | 3000 | Server port |
 | `API_TOKEN` | Yes | - | Bearer authentication token |
@@ -175,7 +210,28 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         client_max_body_size 10M;
-    }
+   Styling Translations
+
+The `/merge` endpoint wraps translations in `<span class="jsdom-extract-merge">` elements for easy styling:
+
+```css
+/* Simple inline style */
+.jsdom-extract-merge {
+  color: #0066cc;
+  font-style: italic;
+}
+
+/* Block-level style for better separation */
+.jsdom-extract-merge {
+  display: block;
+  margin-top: 0.5em;
+  padding: 0.5em;
+  background-color: #f0f8ff;
+  border-left: 3px solid #0066cc;
+}
+```
+
+##  }
 }
 ```
 

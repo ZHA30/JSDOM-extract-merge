@@ -1,11 +1,12 @@
 {
   "name": "jsdom-extract-merge",
   "version": "1.0.0",
-  "description": "HTML text extraction and translation merge API based on jsdom",
+  "description": "HTML text extraction and translation merge/replace API based on jsdom",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
   },
   "keywords": [
     "jsdom",
@@ -13,8 +14,11 @@
     "text-extraction",
     "translation",
     "merge",
+    "replace",
     "api",
-    "bilingual"
+    "bilingual",
+    "i18n",
+    "internationalization"
   ],
   "author": "",
   "license": "MIT",
@@ -23,5 +27,9 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ZHA30/JSDOM-extract-merge"
   }
 }

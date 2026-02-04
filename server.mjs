@@ -351,6 +351,7 @@ function mergeTranslations(html, translations, res) {
       
       // Create bilingual span and append
       const span = doc.createElement('span');
+      span.className = 'jsdom-extract-merge';
       span.innerHTML = `<br>${trans.text}`;
       node.appendChild(span);
     }
@@ -361,6 +362,36 @@ function mergeTranslations(html, translations, res) {
     return transhtml;
   } catch (error) {
     log('ERROR', 'Merge exception', { error: error.message, stack: error.stack });
+    sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
+    return null;
+  }
+}
+
+// Replace translations in HTML (pure translation mode)
+function replaceTranslations(html, translations, res) {
+  try {
+    const dom = new JSDOM(html, { url: 'http://localhost' });
+    const doc = dom.window.document;
+    
+    for (const trans of translations) {
+      const node = findByPath(doc, trans.path);
+      
+      if (!node) {
+        log('WARN', 'Path not found', { path: trans.path });
+        sendJsonResponse(res, 400, { error: 'INVALID_PATH', path: trans.path });
+        return null;
+      }
+      
+      // Replace node content with translation
+      node.innerHTML = trans.text;
+    }
+    
+    const transhtml = doc.body.innerHTML;
+    dom.window.close();
+    
+    return transhtml;
+  } catch (error) {
+    log('ERROR', 'Replace exception', { error: error.message, stack: error.stack });
     sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
     return null;
   }
@@ -489,6 +520,43 @@ async function handleMerge(req, res) {
   }
 }
 
+// Handle POST /replace endpoint
+async function handleReplace(req, res) {
+  const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+
+  if (!validateToken(req, res)) {
+    log('WARN', 'Authentication failed', { requestId, ip: req.socket.remoteAddress });
+    return;
+  }
+
+  log('INFO', 'Replace request received', { requestId });
+
+  try {
+    const body = await readRequestBody(req, res);
+    const json = parseMergeInput(req, body, res);
+    if (!json) {
+      log('WARN', 'Invalid replace input', { requestId });
+      return;
+    }
+
+    const htmlSize = json.html.length;
+    const transCount = json.translations.length;
+    log('INFO', 'Replace input validated', { requestId, htmlSize, transCount });
+
+    const transhtml = replaceTranslations(json.html, json.translations, res);
+    if (transhtml === null) {
+      log('ERROR', 'Replace failed', { requestId });
+      return;
+    }
+
+    sendJsonResponse(res, 200, { transhtml });
+    log('INFO', 'Replace completed successfully', { requestId, htmlSize, transCount });
+  } catch (error) {
+    log('ERROR', 'Unexpected error during replace', { requestId, error: error.message });
+    sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
+  }
+}
+
 // Create HTTP server
 const server = http.createServer(async (req, res) => {
   // Enable CORS (optional, for flexibility)
@@ -529,6 +597,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Replace endpoint
+  if (req.method === 'POST' && req.url === '/replace') {
+    await handleReplace(req, res);
+    return;
+  }
+
   // 404 for unknown routes
   log('WARN', 'Route not found', { method: req.method, url: req.url });
   res.writeHead(404, { 'Content-Type': CONTENT_TYPE_JSON });
@@ -539,7 +613,11 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   log('INFO', 'jsdom Text Extractor API server is running', {
     port: PORT,
-    endpoint: `http://localhost:${PORT}/extract`,
+    endpoints: {
+      extract: `http://localhost:${PORT}/extract`,
+      merge: `http://localhost:${PORT}/merge`,
+      replace: `http://localhost:${PORT}/replace`
+    },
     healthCheck: `http://localhost:${PORT}/healthz`
   });
 });
