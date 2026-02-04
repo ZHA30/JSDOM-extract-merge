@@ -29,6 +29,7 @@ npm start
 Extract text content with inline tags and DOM paths.
 
 **Request:**
+
 ```json
 {
   "html": "<div><h1>Title</h1><p>Content with <strong>bold</strong></p></div>"
@@ -36,6 +37,7 @@ Extract text content with inline tags and DOM paths.
 ```
 
 **Response:**
+
 ```json
 {
   "texts": [
@@ -50,6 +52,7 @@ Extract text content with inline tags and DOM paths.
 Merge translated content back into HTML as bilingual (original + translation).
 
 **Request:**
+
 ```json
 {
   "html": "<div><h1>Title</h1><p>Content</p></div>",
@@ -61,6 +64,7 @@ Merge translated content back into HTML as bilingual (original + translation).
 ```
 
 **Response:**
+
 ```json
 {
   "transhtml": "<div><h1>Title<span class=\"jsdom-extract-merge\"><br>标题</span></h1><p>Content<span class=\"jsdom-extract-merge\"><br>内容</span></p></div>"
@@ -74,6 +78,7 @@ Merge translated content back into HTML as bilingual (original + translation).
 Replace content with translations (pure translation mode).
 
 **Request:**
+
 ```json
 {
   "html": "<div><h1>Title</h1><p>Content</p></div>",
@@ -85,6 +90,7 @@ Replace content with translations (pure translation mode).
 ```
 
 **Response:**
+
 ```json
 {
   "transhtml": "<div><h1>标题</h1><p>内容</p></div>"
@@ -93,7 +99,7 @@ Replace content with translations (pure translation mode).
 
 ## Path Format
 
-```
+```text
 html.0.body.0.div.0.p.0
 │     │  │    │    │    │
 │     │  │    │    │    └─ 1st <p> element
@@ -107,33 +113,24 @@ html.0.body.0.div.0.p.0
 ## Filtering
 
 Skipped elements (not extracted):
+
 - `<picture>`, `<img>`, `<svg>`, `<canvas>`
 - `<iframe>`, `<video>`, `<audio>`, `<map>`, `<object>`, `<embed>`
 - `<track>`, `<source>`
 
 Preserved elements (extracted with content):
+
 - `<figure>` → processes `<figcaption>`
 - Block elements: `<div>`, `<p>`, `<h1>-<h6>`, `<section>`, etc.
 
 Inline tags (preserved in output): `<a>`, `<em>`, `<strong>`, `<code>`, `<span>`, etc.
 
 ## Configuration
- - Bilingual mode (original + translation)
-curl -X POST http://localhost:3000/merge \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "html": "<div><p>Hello <em>world</em></p></div>",
-    "translations": [
-      {"path": "html.0.body.0.div.0.p.0", "text": "你好 <em>世界</em>"}
-    ]
-  }'
 
-# Or use Replace - Pure translation mode
-curl -X POST http://localhost:3000/replaciption |
-|----------|----------|---------|-------------|
-| `PORT` | No | 3000 | Server port |
-| `API_TOKEN` | Yes | - | Bearer authentication token |
+| Variable   | Required | Default | Description                  |
+|------------|----------|---------|------------------------------|
+| `PORT`     | No       | 3000    | Server port                  |
+| `API_TOKEN`| Yes      | -       | Bearer authentication token  |
 
 ## Limits
 
@@ -168,11 +165,32 @@ curl -X POST http://localhost:3000/merge \
 ## Error Responses
 
 | Code | Error | Description |
-|------|-------|-------------|
+| :--- | :---- | :---------- |
 | 401 | `AUTH_REQUIRED` | Missing/invalid Authorization header |
 | 400 | `INVALID_INPUT` | Invalid JSON, missing fields, or size exceeded |
 | 400 | `INVALID_PATH` | Specified path not found in HTML |
 | 500 | `PROCESSING_ERROR` | HTML processing failed |
+
+## Styling Translations
+
+The `/merge` endpoint wraps translations in `<span class="jsdom-extract-merge">` elements for easy styling:
+
+```css
+/* Simple inline style */
+.jsdom-extract-merge {
+  color: #0066cc;
+  font-style: italic;
+}
+
+/* Block-level style for better separation */
+.jsdom-extract-merge {
+  display: block;
+  margin-top: 0.5em;
+  padding: 0.5em;
+  background-color: #f0f8ff;
+  border-left: 3px solid #0066cc;
+}
+```
 
 ## Deployment
 
@@ -210,28 +228,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         client_max_body_size 10M;
-   Styling Translations
-
-The `/merge` endpoint wraps translations in `<span class="jsdom-extract-merge">` elements for easy styling:
-
-```css
-/* Simple inline style */
-.jsdom-extract-merge {
-  color: #0066cc;
-  font-style: italic;
-}
-
-/* Block-level style for better separation */
-.jsdom-extract-merge {
-  display: block;
-  margin-top: 0.5em;
-  padding: 0.5em;
-  background-color: #f0f8ff;
-  border-left: 3px solid #0066cc;
-}
-```
-
-##  }
+    }
 }
 ```
 
