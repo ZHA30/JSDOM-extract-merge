@@ -9,12 +9,6 @@ const MAX_HTML_SIZE = 10 * 1024 * 1024; // 10MB
 // Service identification
 const SERVICE_NAME = 'JSDOM-extract-merge';
 
-// Validate required environment variables
-if (!API_TOKEN) {
-  log('ERROR', 'API_TOKEN environment variable is required');
-  process.exit(1);
-}
-
 // Homepage content
 const HOMEPAGE_CONTENT = `${SERVICE_NAME}`;
 
@@ -30,12 +24,6 @@ const ERRORS = {
   INVALID_INPUT: 'INVALID_INPUT',
   PROCESSING_ERROR: 'PROCESSING_ERROR'
 };
-
-// Send JSON response helper
-function sendJsonResponse(res, statusCode, data) {
-  res.writeHead(statusCode, { 'Content-Type': CONTENT_TYPE_JSON });
-  res.end(JSON.stringify(data));
-}
 
 // Logging helper
 function log(level, message, context = {}) {
@@ -58,6 +46,18 @@ function log(level, message, context = {}) {
     default:
       console.log(logLine);
   }
+}
+
+// Validate required environment variables
+if (!API_TOKEN) {
+  log('ERROR', 'API_TOKEN environment variable is required');
+  process.exit(1);
+}
+
+// Send JSON response helper
+function sendJsonResponse(res, statusCode, data) {
+  res.writeHead(statusCode, { 'Content-Type': CONTENT_TYPE_JSON });
+  res.end(JSON.stringify(data));
 }
 
 // Process request body with size limit
@@ -124,12 +124,7 @@ function parseInput(req, body, res) {
   }
 
   // Validate html field
-  if (!json.hasOwnProperty('html')) {
-    sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
-    return null;
-  }
-
-  if (typeof json.html !== 'string') {
+  if (!('html' in json) || typeof json.html !== 'string') {
     sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
     return null;
   }
@@ -145,16 +140,15 @@ function parseInput(req, body, res) {
 
 // List of block-level elements that should separate text content
 const BLOCK_ELEMENTS = new Set([
-  'address', 'article', 'aside', 'blockquote', 'canvas', 'dd', 'div',
+  'address', 'article', 'aside', 'blockquote', 'dd', 'div',
   'dl', 'dt', 'fieldset', 'figcaption', 'figure', 'footer', 'form',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main',
-  'nav', 'noscript', 'ol', 'output', 'p', 'pre', 'section', 'table',
-  'tfoot', 'ul', 'video', 'tr', 'td', 'th', 'thead', 'tbody', 'colgroup'
+  'nav', 'ol', 'output', 'p', 'pre', 'section', 'table',
+  'tfoot', 'ul', 'tr', 'td', 'th', 'thead', 'tbody', 'colgroup'
 ]);
 
 // Elements that should be skipped during extraction (no translation needed)
 const SKIP_ELEMENTS = new Set([
-  'figure',      // Images/figures with captions
   'picture',     // Picture containers
   'img',         // Images
   'svg',         // SVG graphics
@@ -165,7 +159,6 @@ const SKIP_ELEMENTS = new Set([
   'map',         // Image maps
   'object',      // Embedded objects
   'embed',       // Embedded content
-  'noscript',    // No-script content
   'track',       // Text tracks for media
   'source'       // Media sources
 ]);
@@ -181,11 +174,8 @@ function isBlockElement(element) {
 }
 
 // Check if an element contains only media elements (no translatable text)
+// Note: Caller ensures element is an ELEMENT_NODE
 function containsOnlyMedia(element) {
-  if (element.nodeType !== element.ELEMENT_NODE) {
-    return false;
-  }
-
   // Get all text content, excluding media elements
   const clone = element.cloneNode(true);
   
@@ -378,7 +368,7 @@ function mergeTranslations(html, translations, res) {
 
 // Handle POST /extract endpoint
 async function handleExtract(req, res) {
-  const requestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+  const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
 
   // Validate token first
   if (!validateToken(req, res)) {
@@ -433,22 +423,22 @@ function parseMergeInput(req, body, res) {
     return null;
   }
 
-  if (!json.hasOwnProperty('html') || typeof json.html !== 'string') {
+  if (!('html' in json) || typeof json.html !== 'string') {
     sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
     return null;
   }
 
-  if (!json.hasOwnProperty('translations') || !Array.isArray(json.translations)) {
+  if (!('translations' in json) || !Array.isArray(json.translations)) {
     sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
     return null;
   }
 
   for (const trans of json.translations) {
-    if (!trans.hasOwnProperty('path') || typeof trans.path !== 'string') {
+    if (!('path' in trans) || typeof trans.path !== 'string') {
       sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
       return null;
     }
-    if (!trans.hasOwnProperty('text') || typeof trans.text !== 'string') {
+    if (!('text' in trans) || typeof trans.text !== 'string') {
       sendJsonResponse(res, 400, { error: ERRORS.INVALID_INPUT });
       return null;
     }
@@ -464,7 +454,7 @@ function parseMergeInput(req, body, res) {
 
 // Handle POST /merge endpoint
 async function handleMerge(req, res) {
-  const requestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+  const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
 
   if (!validateToken(req, res)) {
     log('WARN', 'Authentication failed', { requestId, ip: req.socket.remoteAddress });

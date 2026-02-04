@@ -1,10 +1,14 @@
 # JSDOM-extract-merge
 
-[中文文档](README.zh-CN.md) | English
+English | [中文文档](README.zh-CN.md)
 
-HTML text extraction and translation merge API using jsdom. Preserves inline tags and uses DOM paths for node targeting.
+基于 jsdom 的 HTML 文本提取与翻译合并 API。保留行内标签，使用 DOM 路径精确定位节点。
 
-## Quick Start
+## 概述
+
+从 HTML 中提取可翻译文本，同时保留行内标记（`<em>`, `<strong>`, `<code>` 等），并生成 DOM 路径用于精确定位和重新插入翻译内容。
+
+## 快速开始
 
 ### Docker
 
@@ -26,16 +30,16 @@ npm start
 
 ### POST /extract
 
-Extract text content with inline tags and DOM paths.
+提取包含行内标签和 DOM 路径的文本内容。
 
-**Request:**
+**请求：**
 ```json
 {
   "html": "<div><h1>Title</h1><p>Content with <strong>bold</strong></p></div>"
 }
 ```
 
-**Response:**
+**响应：**
 ```json
 {
   "texts": [
@@ -47,9 +51,9 @@ Extract text content with inline tags and DOM paths.
 
 ### POST /merge
 
-Merge translated content back into HTML.
+将翻译内容合并回 HTML。
 
-**Request:**
+**请求：**
 ```json
 {
   "html": "<div><h1>Title</h1><p>Content</p></div>",
@@ -60,65 +64,65 @@ Merge translated content back into HTML.
 }
 ```
 
-**Response:**
+**响应：**
 ```json
 {
   "transhtml": "<div><h1>Title<span><br>标题</span></h1><p>Content<span><br>内容</span></p></div>"
 }
 ```
 
-## Path Format
+## 路径格式
 
 ```
 html.0.body.0.div.0.p.0
 │     │  │    │    │    │
-│     │  │    │    │    └─ 1st <p> element
-│     │  │    │    └────── 1st <div> element
-│     │  │    └─────────── 1st <body> child
-│     │  └──────────────── 1st <html> child
-│     └─────────────────── <html> element
-└───────────────────────── root
+│     │  │    │    │    └─ 第 1 个 <p> 元素
+│     │  │    │    └────── 第 1 个 <div> 元素
+│     │  │    └─────────── 第 1 个 <body> 子元素
+│     │  └──────────────── 第 1 个 <html> 子元素
+│     └─────────────────── <html> 元素
+└───────────────────────── 根元素
 ```
 
-## Filtering
+## 过滤规则
 
-Skipped elements (not extracted):
+跳过的元素（不提取）：
 - `<picture>`, `<img>`, `<svg>`, `<canvas>`
 - `<iframe>`, `<video>`, `<audio>`, `<map>`, `<object>`, `<embed>`
 - `<track>`, `<source>`
 
-Preserved elements (extracted with content):
-- `<figure>` → processes `<figcaption>`
-- Block elements: `<div>`, `<p>`, `<h1>-<h6>`, `<section>`, etc.
+保留的元素（提取内容）：
+- `<figure>` → 处理 `<figcaption>`
+- 块级元素：`<div>`, `<p>`, `<h1>-<h6>`, `<section>` 等
 
-Inline tags (preserved in output): `<a>`, `<em>`, `<strong>`, `<code>`, `<span>`, etc.
+行内标签（保留在输出中）：`<a>`, `<em>`, `<strong>`, `<code>`, `<span>` 等
 
-## Configuration
+## 配置
 
-| Variable | Required | Default | Description |
+| 变量 | 必填 | 默认值 | 说明 |
 |----------|----------|---------|-------------|
-| `PORT` | No | 3000 | Server port |
-| `API_TOKEN` | Yes | - | Bearer authentication token |
+| `PORT` | 否 | 3000 | 服务端口 |
+| `API_TOKEN` | 是 | - | Bearer 认证令牌 |
 
-## Limits
+## 限制
 
-- Max HTML size: 10MB
-- No JavaScript execution
-- No URL fetching (HTML must be provided)
-- `<script>` and `<style>` preserved if present
+- 最大 HTML 大小：10MB
+- 不执行 JavaScript
+- 不处理 URL（需提供 HTML 文本）
+- 保留 `<script>` 和 `<style>`（如果存在）
 
-## Example Workflow
+## 工作流示例
 
 ```bash
-# Extract
+# 提取
 curl -X POST http://localhost:3000/extract \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"html": "<div><p>Hello <em>world</em></p></div>"}'
 
-# Translate (external service)
+# 翻译（外部服务）
 
-# Merge
+# 合并
 curl -X POST http://localhost:3000/merge \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -130,16 +134,16 @@ curl -X POST http://localhost:3000/merge \
   }'
 ```
 
-## Error Responses
+## 错误响应
 
-| Code | Error | Description |
+| 状态码 | 错误 | 说明 |
 |------|-------|-------------|
-| 401 | `AUTH_REQUIRED` | Missing/invalid Authorization header |
-| 400 | `INVALID_INPUT` | Invalid JSON, missing fields, or size exceeded |
-| 400 | `INVALID_PATH` | Specified path not found in HTML |
-| 500 | `PROCESSING_ERROR` | HTML processing failed |
+| 401 | `AUTH_REQUIRED` | 缺少或无效的 Authorization 头 |
+| 400 | `INVALID_INPUT` | 无效 JSON、缺少字段或超过大小限制 |
+| 400 | `INVALID_PATH` | HTML 中未找到指定路径 |
+| 500 | `PROCESSING_ERROR` | HTML 处理失败 |
 
-## Deployment
+## 部署
 
 ### Docker Compose
 
@@ -160,7 +164,7 @@ services:
       retries: 3
 ```
 
-### Nginx Reverse Proxy
+### Nginx 反向代理
 
 ```nginx
 server {
@@ -179,17 +183,17 @@ server {
 }
 ```
 
-## Security
+## 安全建议
 
-1. Generate strong tokens: `openssl rand -base64 32`
-2. Always use HTTPS in production
-3. Rotate tokens periodically
-4. Implement rate limiting at reverse proxy layer
+1. 生成强令牌：`openssl rand -base64 32`
+2. 生产环境始终使用 HTTPS
+3. 定期轮换令牌
+4. 在反向代理层实现速率限制
 
-## Dependencies
+## 依赖
 
 - [jsdom](https://github.com/jsdom/jsdom) ^25.0.1
 
-## License
+## 许可证
 
 MIT
