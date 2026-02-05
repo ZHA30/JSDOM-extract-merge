@@ -340,13 +340,30 @@ function mergeTranslations(html, translations, res) {
     const dom = new JSDOM(html, { url: 'http://localhost' });
     const doc = dom.window.document;
     
+    // Statistics tracking
+    let stats = {
+      total: translations.length,
+      merged: 0,
+      skipped: 0,
+      skippedPaths: []
+    };
+    
     for (const trans of translations) {
       const node = findByPath(doc, trans.path);
       
       if (!node) {
         log('WARN', 'Path not found', { path: trans.path });
         sendJsonResponse(res, 400, { error: 'INVALID_PATH', path: trans.path });
+        dom.window.close();
         return null;
+      }
+      
+      // Skip empty or whitespace-only text
+      if (!trans.text || trans.text.trim().length === 0) {
+        stats.skipped++;
+        stats.skippedPaths.push(trans.path);
+        log('WARN', 'Skipping empty translation', { path: trans.path });
+        continue;
       }
       
       // Create bilingual span and append
@@ -354,12 +371,15 @@ function mergeTranslations(html, translations, res) {
       span.className = 'jsdom-extract-merge';
       span.innerHTML = `<br>${trans.text}`;
       node.appendChild(span);
+      
+      stats.merged++;
     }
     
     const transhtml = doc.body.innerHTML;
     dom.window.close();
     
-    return transhtml;
+    // Return result with statistics
+    return { transhtml, stats };
   } catch (error) {
     log('ERROR', 'Merge exception', { error: error.message, stack: error.stack });
     sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
@@ -373,23 +393,43 @@ function replaceTranslations(html, translations, res) {
     const dom = new JSDOM(html, { url: 'http://localhost' });
     const doc = dom.window.document;
     
+    // Statistics tracking
+    let stats = {
+      total: translations.length,
+      replaced: 0,
+      skipped: 0,
+      skippedPaths: []
+    };
+    
     for (const trans of translations) {
       const node = findByPath(doc, trans.path);
       
       if (!node) {
         log('WARN', 'Path not found', { path: trans.path });
         sendJsonResponse(res, 400, { error: 'INVALID_PATH', path: trans.path });
+        dom.window.close();
         return null;
+      }
+      
+      // Skip empty or whitespace-only text to avoid deleting original content
+      if (!trans.text || trans.text.trim().length === 0) {
+        stats.skipped++;
+        stats.skippedPaths.push(trans.path);
+        log('WARN', 'Skipping empty translation', { path: trans.path });
+        continue;
       }
       
       // Replace node content with translation
       node.innerHTML = trans.text;
+      
+      stats.replaced++;
     }
     
     const transhtml = doc.body.innerHTML;
     dom.window.close();
     
-    return transhtml;
+    // Return result with statistics
+    return { transhtml, stats };
   } catch (error) {
     log('ERROR', 'Replace exception', { error: error.message, stack: error.stack });
     sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
@@ -506,14 +546,22 @@ async function handleMerge(req, res) {
     const transCount = json.translations.length;
     log('INFO', 'Merge input validated', { requestId, htmlSize, transCount });
 
-    const transhtml = mergeTranslations(json.html, json.translations, res);
-    if (transhtml === null) {
+    const result = mergeTranslations(json.html, json.translations, res);
+    if (result === null) {
       log('ERROR', 'Merge failed', { requestId });
       return;
     }
 
-    sendJsonResponse(res, 200, { transhtml });
-    log('INFO', 'Merge completed successfully', { requestId, htmlSize, transCount });
+    sendJsonResponse(res, 200, { 
+      transhtml: result.transhtml,
+      stats: result.stats 
+    });
+    
+    log('INFO', 'Merge completed successfully', { 
+      requestId, 
+      htmlSize, 
+      ...result.stats 
+    });
   } catch (error) {
     log('ERROR', 'Unexpected error during merge', { requestId, error: error.message });
     sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });
@@ -543,14 +591,22 @@ async function handleReplace(req, res) {
     const transCount = json.translations.length;
     log('INFO', 'Replace input validated', { requestId, htmlSize, transCount });
 
-    const transhtml = replaceTranslations(json.html, json.translations, res);
-    if (transhtml === null) {
+    const result = replaceTranslations(json.html, json.translations, res);
+    if (result === null) {
       log('ERROR', 'Replace failed', { requestId });
       return;
     }
 
-    sendJsonResponse(res, 200, { transhtml });
-    log('INFO', 'Replace completed successfully', { requestId, htmlSize, transCount });
+    sendJsonResponse(res, 200, { 
+      transhtml: result.transhtml,
+      stats: result.stats 
+    });
+    
+    log('INFO', 'Replace completed successfully', { 
+      requestId, 
+      htmlSize, 
+      ...result.stats 
+    });
   } catch (error) {
     log('ERROR', 'Unexpected error during replace', { requestId, error: error.message });
     sendJsonResponse(res, 500, { error: ERRORS.PROCESSING_ERROR });

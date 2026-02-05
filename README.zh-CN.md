@@ -71,11 +71,19 @@ npm start
 
 ```json
 {
-  "transhtml": "<div><h1>Title<span class=\"jsdom-extract-merge\"><br>标题</span></h1><p>Content<span class=\"jsdom-extract-merge\"><br>内容</span></p></div>"
+  "transhtml": "<div><h1>Title<span class=\"jsdom-extract-merge\"><br>标题</span></h1><p>Content<span class=\"jsdom-extract-merge\"><br>内容</span></p></div>",
+  "stats": {
+    "total": 2,
+    "merged": 2,
+    "skipped": 0,
+    "skippedPaths": []
+  }
 }
 ```
 
 > **注意：** 翻译内容被包裹在带有 `class="jsdom-extract-merge"` 属性的 `<span>` 元素中，便于样式定制。
+>
+> **空文本处理：** 空字符串或仅包含空白字符的翻译会被自动跳过，避免插入空的 `<span>` 元素。详见下方的[统计信息](#统计信息)。
 
 ### POST /replace
 
@@ -97,9 +105,17 @@ npm start
 
 ```json
 {
-  "transhtml": "<div><h1>标题</h1><p>内容</p></div>"
+  "transhtml": "<div><h1>标题</h1><p>内容</p></div>",
+  "stats": {
+    "total": 2,
+    "replaced": 2,
+    "skipped": 0,
+    "skippedPaths": []
+  }
 }
 ```
+
+> **空文本处理：** 空字符串或仅包含空白字符的翻译会被自动跳过，避免意外删除原始内容。详见下方的[统计信息](#统计信息)。
 
 ## 路径格式
 
@@ -129,6 +145,38 @@ html.0.body.0.div.0.p.0
 
 行内标签（保留在输出中）：`<a>`, `<em>`, `<strong>`, `<code>`, `<span>` 等
 
+## 统计信息
+
+`/merge` 和 `/replace` 端点都会返回 `stats` 对象，包含处理详情：
+
+```json
+{
+  "stats": {
+    "total": 10,
+    "merged": 8,       // 仅 `/merge`：成功合并的数量
+    "replaced": 8,     // 仅 `/replace`：成功替换的数量
+    "skipped": 2,
+    "skippedPaths": [
+      "html.0.body.0.div.0.p.1",
+      "html.0.body.0.div.0.p.2"
+    ]
+  }
+}
+```
+
+### 空文本行为
+
+| 翻译文本 | 行为 |
+|---------|------|
+| 非空字符串 | 正常合并/替换 |
+| `""`（空字符串） | ⚠️ 跳过 - 记录在 `stats.skippedPaths` 中 |
+| `"   "`（纯空白） | ⚠️ 跳过 - 去除空格后检查 |
+| `null` / `undefined` | ❌ 返回 `INVALID_INPUT` 错误 |
+
+**为什么跳过空文本？**
+- **`/merge`**：防止插入 `<span class="jsdom-extract-merge"><br></span>` 空内容
+- **`/replace`**：防止用空内容替换时意外删除原文
+
 ## 配置
 
 | 变量 | 必需 | 默认值 | 说明 |
@@ -154,7 +202,7 @@ curl -X POST http://localhost:3000/extract \
 
 # 翻译（外部服务）
 
-# 合并
+# 合并并获取统计信息
 curl -X POST http://localhost:3000/merge \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -163,7 +211,18 @@ curl -X POST http://localhost:3000/merge \
     "translations": [
       {"path": "html.0.body.0.div.0.p.0", "text": "你好 <em>世界</em>"}
     ]
-  }'
+  }' | jq
+
+# 响应包含统计信息：
+# {
+#   "transhtml": "...",
+#   "stats": {
+#     "total": 1,
+#     "merged": 1,
+#     "skipped": 0,
+#     "skippedPaths": []
+#   }
+# }
 ```
 
 ## 错误响应
@@ -174,6 +233,8 @@ curl -X POST http://localhost:3000/merge \
 | 400 | `INVALID_INPUT` | 无效 JSON、缺少字段或超过大小限制 |
 | 400 | `INVALID_PATH` | HTML 中未找到指定路径 |
 | 500 | `PROCESSING_ERROR` | HTML 处理失败 |
+
+**注意：** 空翻译文本不被视为错误 - 它们会被静默跳过并记录在 `stats` 响应中。请检查 `stats.skipped` 和 `stats.skippedPaths` 来监控翻译质量。
 
 ## 样式定制
 

@@ -67,11 +67,19 @@ Merge translated content back into HTML as bilingual (original + translation).
 
 ```json
 {
-  "transhtml": "<div><h1>Title<span class=\"jsdom-extract-merge\"><br>标题</span></h1><p>Content<span class=\"jsdom-extract-merge\"><br>内容</span></p></div>"
+  "transhtml": "<div><h1>Title<span class=\"jsdom-extract-merge\"><br>标题</span></h1><p>Content<span class=\"jsdom-extract-merge\"><br>内容</span></p></div>",
+  "stats": {
+    "total": 2,
+    "merged": 2,
+    "skipped": 0,
+    "skippedPaths": []
+  }
 }
 ```
 
 > **Note:** Translated content is wrapped in a `<span>` element with `class="jsdom-extract-merge"` for easy styling.
+>
+> **Empty Text Handling:** Empty strings or whitespace-only translations are automatically skipped to prevent inserting empty `<span>` elements. See [Statistics](#statistics) below for details.
 
 ### POST /replace
 
@@ -93,9 +101,17 @@ Replace content with translations (pure translation mode).
 
 ```json
 {
-  "transhtml": "<div><h1>标题</h1><p>内容</p></div>"
+  "transhtml": "<div><h1>标题</h1><p>内容</p></div>",
+  "stats": {
+    "total": 2,
+    "replaced": 2,
+    "skipped": 0,
+    "skippedPaths": []
+  }
 }
 ```
+
+> **Empty Text Handling:** Empty strings or whitespace-only translations are automatically skipped to prevent deleting original content. See [Statistics](#statistics) below for details.
 
 ## Path Format
 
@@ -125,6 +141,38 @@ Preserved elements (extracted with content):
 
 Inline tags (preserved in output): `<a>`, `<em>`, `<strong>`, `<code>`, `<span>`, etc.
 
+## Statistics
+
+Both `/merge` and `/replace` endpoints return a `stats` object with processing details:
+
+```json
+{
+  "stats": {
+    "total": 10,
+    "merged": 8,       // "/merge" only: number of successful merges
+    "replaced": 8,     // "/replace" only: number of successful replacements
+    "skipped": 2,
+    "skippedPaths": [
+      "html.0.body.0.div.0.p.1",
+      "html.0.body.0.div.0.p.2"
+    ]
+  }
+}
+```
+
+### Empty Text Behavior
+
+| Translation Text | Behavior |
+|-----------------|----------|
+| Non-empty string | Merged/Replaced normally |
+| `""` (empty) | ⚠️ Skipped - logged in `stats.skippedPaths` |
+| `"   "` (whitespace) | ⚠️ Skipped - trimmed and checked |
+| `null` / `undefined` | ❌ Returns `INVALID_INPUT` error |
+
+**Why skip empty text?**
+- **`/merge`**: Prevents inserting `<span class="jsdom-extract-merge"><br></span>` with no content
+- **`/replace`**: Prevents accidentally deleting original content by replacing it with nothing
+
 ## Configuration
 
 | Variable   | Required | Default | Description                  |
@@ -150,7 +198,7 @@ curl -X POST http://localhost:3000/extract \
 
 # Translate (external service)
 
-# Merge
+# Merge with statistics
 curl -X POST http://localhost:3000/merge \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -159,7 +207,18 @@ curl -X POST http://localhost:3000/merge \
     "translations": [
       {"path": "html.0.body.0.div.0.p.0", "text": "你好 <em>世界</em>"}
     ]
-  }'
+  }' | jq
+
+# Response includes stats:
+# {
+#   "transhtml": "...",
+#   "stats": {
+#     "total": 1,
+#     "merged": 1,
+#     "skipped": 0,
+#     "skippedPaths": []
+#   }
+# }
 ```
 
 ## Error Responses
@@ -170,6 +229,8 @@ curl -X POST http://localhost:3000/merge \
 | 400 | `INVALID_INPUT` | Invalid JSON, missing fields, or size exceeded |
 | 400 | `INVALID_PATH` | Specified path not found in HTML |
 | 500 | `PROCESSING_ERROR` | HTML processing failed |
+
+**Note:** Empty translation texts are not considered errors - they are silently skipped and logged in the `stats` response. Check `stats.skipped` and `stats.skippedPaths` to monitor translation quality.
 
 ## Styling Translations
 
